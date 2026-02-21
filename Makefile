@@ -48,3 +48,12 @@ bundle-import:
 
 rollback:
 	@echo "Use helm rollback + runbook docs/runbooks/rollback.md"
+
+# ── Pi Image ──────────────────────────────────────────────────────────────
+.PHONY: pi-verify pi-image
+
+pi-verify:
+	@bash tools/pi-image/verify.sh
+
+pi-image: pi-verify
+	@echo "Build with: sudo tools/pi-image/vw-build-pi-image.sh --tile-id <id> ..."

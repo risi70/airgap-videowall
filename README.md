@@ -303,4 +303,4 @@ Full verification details: [`docs/architecture-completeness-report.md`](docs/arc
 
 ## License
 
-Apache-2.0
+EUPL-1.2 — see [LICENSE](LICENSE)

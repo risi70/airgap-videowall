@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# SPDX-License-Identifier: EUPL-1.2
 # ──────────────────────────────────────────────────────────────────────────────
 # vw-build-pi-image.sh — Build a minimal SD-card image for videowall decoders
 #
@@ -263,9 +264,14 @@ APK_PACKAGES="
   mpv
   gstreamer gst-plugins-base gst-plugins-good gst-plugins-bad
   gst-plugins-ugly gstreamer-tools
+  gst-libav
+  libsrt srt-tools gst-plugins-bad-srt
   ffmpeg
-  mesa-dri-gallium mesa-egl mesa-gbm
-  python3 py3-requests py3-yaml
+  mesa-dri-gallium mesa-egl mesa-gbm libdrm
+  v4l-utils
+  libva libva-utils
+  python3 py3-requests py3-yaml py3-pip
+  curl jq zstd
   openssl ca-certificates
   openssh-server
   chrony
@@ -274,9 +280,10 @@ APK_PACKAGES="
   sudo
   iptables ip6tables
   htop lsof
-  util-linux e2fsprogs dosfstools
-  nano
+  util-linux e2fsprogs dosfstools sfdisk
+  watchdog
   busybox-openrc
+  rfkill
 "
 
 # Optional extra packages
@@ -316,8 +323,9 @@ arm_boost=1
 arm_boost=1
 
 [all]
-# Disable Bluetooth (saves power, reduces interference)
+# Disable Bluetooth and Wi-Fi (air-gapped; reduces attack surface)
 dtoverlay=disable-bt
+dtoverlay=disable-wifi
 
 # Enable hardware watchdog
 dtparam=watchdog=on
@@ -543,6 +551,54 @@ fs.protected_hardlinks = 1
 fs.protected_symlinks = 1
 EOF
 
+# Disable Wi-Fi and Bluetooth via rfkill (defense in depth beyond dtoverlay)
+cat > "${MNT_ROOT}/etc/local.d/05-rfkill.start" << 'RFEOF'
+#!/bin/sh
+rfkill block wifi 2>/dev/null || true
+rfkill block bluetooth 2>/dev/null || true
+RFEOF
+chmod +x "${MNT_ROOT}/etc/local.d/05-rfkill.start"
+
+# Journald configuration (log limits for SD card longevity)
+mkdir -p "${MNT_ROOT}/etc/conf.d"
+cat > "${MNT_ROOT}/etc/conf.d/vw-journald" << 'EOF'
+# Journald-equivalent log limits (OpenRC uses syslog/logrotate)
+# Keep logs small — SD card has limited write endurance
+VW_LOG_MAX_SIZE_MB=50
+VW_LOG_RETENTION_DAYS=14
+EOF
+
+# Logrotate for player logs
+mkdir -p "${MNT_ROOT}/etc/periodic/daily"
+cat > "${MNT_ROOT}/etc/periodic/daily/vw-logrotate" << 'LOGEOF'
+#!/bin/sh
+# Rotate videowall logs
+LOG_DIR="/opt/videowall/logs"
+MAX_SIZE=10485760  # 10MB
+KEEP=5
+
+for logfile in "$LOG_DIR"/*.log; do
+  [ -f "$logfile" ] || continue
+  size=$(stat -c%s "$logfile" 2>/dev/null || echo 0)
+  if [ "$size" -gt "$MAX_SIZE" ]; then
+    # Rotate
+    i=$KEEP
+    while [ "$i" -gt 0 ]; do
+      prev=$((i - 1))
+      [ -f "${logfile}.${prev}" ] && mv "${logfile}.${prev}" "${logfile}.${i}"
+      i=$((i - 1))
+    done
+    mv "$logfile" "${logfile}.0"
+    touch "$logfile"
+    chown vw-player:vw-player "$logfile"
+  fi
+done
+
+# Clean old logs
+find "$LOG_DIR" -name '*.log.*' -mtime +14 -delete 2>/dev/null || true
+LOGEOF
+chmod +x "${MNT_ROOT}/etc/periodic/daily/vw-logrotate"
+
 # Disable screen blanking at kernel level
 cat >> "${MNT_ROOT}/etc/sysctl.d/99-videowall.conf" << 'EOF'
 kernel.consoleblank = 0
@@ -568,6 +624,28 @@ cp "${REPO_ROOT}/agents/big-player/vw_big_player.py" "${VW_DIR}/agents/big-playe
 cp "${REPO_ROOT}/agents/_common/vw_cfg.py" "${VW_DIR}/agents/_common/"
 cp "${REPO_ROOT}/agents/_common/vw_http.py" "${VW_DIR}/agents/_common/"
 cp "${REPO_ROOT}/agents/wallctl/vw_wallctl.py" "${VW_DIR}/agents/" 2>/dev/null || true
+
+# Install operational tooling from rootfs overlay
+ROOTFS_OVERLAY="${SCRIPT_DIR}/rootfs"
+if [ -d "$ROOTFS_OVERLAY" ]; then
+  log "Installing operational tooling (offline-update, cert-renew, smoketest)..."
+  mkdir -p "${VW_DIR}/bin"
+  cp "${ROOTFS_OVERLAY}/opt/videowall/bin/vw-offline-update.sh" "${VW_DIR}/bin/"
+  cp "${ROOTFS_OVERLAY}/opt/videowall/bin/vw-cert-renew.sh" "${VW_DIR}/bin/"
+  cp "${ROOTFS_OVERLAY}/opt/videowall/bin/vw-smoketest.sh" "${VW_DIR}/bin/"
+  chmod +x "${VW_DIR}/bin/"*.sh
+fi
+
+# Install cert renewal cron job (daily)
+mkdir -p "${MNT_ROOT}/etc/periodic/daily"
+cat > "${MNT_ROOT}/etc/periodic/daily/vw-cert-renew" << 'CRONEOF'
+#!/bin/sh
+exec /opt/videowall/bin/vw-cert-renew.sh
+CRONEOF
+chmod +x "${MNT_ROOT}/etc/periodic/daily/vw-cert-renew"
+
+# Create data directory (writable state: logs, rollback, update staging)
+mkdir -p "${MNT_ROOT}/var/lib/videowall/rollback"
 
 # Copy mTLS certificates
 if [[ -n "$CA_CERT" && -f "$CA_CERT" ]]; then
@@ -613,6 +691,23 @@ VW_CLIENT_KEY=/opt/videowall/certs/client.key
 EOF
 chmod 600 "${VW_DIR}/config/player.env"
 
+# Build metadata (reproducibility + audit trail)
+cat > "${VW_DIR}/.build-metadata.json" << METAEOF
+{
+  "tile_id": "${TILE_ID}",
+  "wall_id": "${WALL_ID}",
+  "hostname": "${HOSTNAME}",
+  "pi_model": "${PI_MODEL}",
+  "alpine_version": "${ALPINE_VERSION}",
+  "hwdec": "${HWDEC}",
+  "player_mode": "${PLAYER_MODE}",
+  "build_date": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "build_host": "$(hostname 2>/dev/null || echo unknown)",
+  "image_size": "${IMAGE_SIZE}",
+  "builder_version": "1.1.0"
+}
+METAEOF
+
 # Per-tile env (for template systemd unit)
 mkdir -p "${MNT_ROOT}/etc/videowall/tiles"
 cat > "${MNT_ROOT}/etc/videowall/tiles/${TILE_ID}.env" << EOF
@@ -648,11 +743,8 @@ HWDEC="${VW_HWDEC:-v4l2m2m}"
 DISPLAY_OPT=""
 [ -n "${VW_DISPLAY:-}" ] && DISPLAY_OPT="--screen=${VW_DISPLAY}"
 
-# Disable screen blanking
-export DISPLAY=:0
-xset -dpms 2>/dev/null || true
-xset s off 2>/dev/null || true
-xset s noblank 2>/dev/null || true
+# DRM/KMS mode — no X11 display server needed
+# Screen blanking is disabled via kernel (consoleblank=0 in sysctl)
 
 STREAM_URL="${VW_STREAM_URL:-}"
 
@@ -703,11 +795,12 @@ while true; do
   if [ -z "$STREAM_URL" ]; then
     echo "[vw-player] No stream URL available; showing slate..." >&2
     if [ -f "$SLATE" ]; then
-      fbi -T 1 --noverbose --autozoom "$SLATE" 2>/dev/null &
-      FBI_PID=$!
+      # Display slate via mpv (single frame, DRM output)
+      mpv --no-terminal --really-quiet --gpu-context=drm --vo=gpu \
+        --image-display-duration=5 --loop-file=no "$SLATE" 2>/dev/null || true
+    else
+      sleep 5
     fi
-    sleep 5
-    kill "$FBI_PID" 2>/dev/null || true
     # Reset for next API poll
     STREAM_URL="${VW_STREAM_URL:-}"
     continue
@@ -779,6 +872,36 @@ start_pre() {
 INITEOF
 chmod +x "${MNT_ROOT}/etc/init.d/vw-player"
 
+# Wall agent service (pulls config from control plane, manages tile assignments)
+cat > "${MNT_ROOT}/etc/init.d/vw-wallagent" << 'WAEOF'
+#!/sbin/openrc-run
+# OpenRC init script for vw-wallagent (wall controller agent)
+
+name="Videowall Wall Agent"
+description="Pulls layout config from mgmt-api and manages tile player"
+command="/usr/bin/python3"
+command_args="/opt/videowall/agents/vw_wallctl.py --config /opt/videowall/config/player.env"
+command_user="vw-player:vw-player"
+command_background=true
+pidfile="/run/${RC_SVCNAME}.pid"
+output_log="/opt/videowall/logs/wallagent.log"
+error_log="/opt/videowall/logs/wallagent-error.log"
+
+respawn_delay=5
+respawn_max=0
+
+depend() {
+    need net
+    after NetworkManager chronyd
+    before vw-player
+}
+
+start_pre() {
+    checkpath -d -m 0755 -o vw-player:vw-player /opt/videowall/logs
+}
+WAEOF
+chmod +x "${MNT_ROOT}/etc/init.d/vw-wallagent"
+
 # Also install a hardware watchdog service
 cat > "${MNT_ROOT}/etc/init.d/vw-watchdog" << 'WDEOF'
 #!/sbin/openrc-run
@@ -816,6 +939,7 @@ chroot "$MNT_ROOT" /sbin/rc-update add seedrng boot 2>/dev/null || true
 chroot "$MNT_ROOT" /sbin/rc-update add sshd default 2>/dev/null || true
 chroot "$MNT_ROOT" /sbin/rc-update add chronyd default 2>/dev/null || true
 chroot "$MNT_ROOT" /sbin/rc-update add NetworkManager default 2>/dev/null || true
+chroot "$MNT_ROOT" /sbin/rc-update add vw-wallagent default 2>/dev/null || true
 chroot "$MNT_ROOT" /sbin/rc-update add vw-player default 2>/dev/null || true
 chroot "$MNT_ROOT" /sbin/rc-update add vw-watchdog default 2>/dev/null || true
 chroot "$MNT_ROOT" /sbin/rc-update add local default 2>/dev/null || true
