@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vw-prometheus-config
+  namespace: {{ .Values.namespace }}
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: {{ .Values.prometheus.scrapeInterval }}
+    rule_files:
+      - /etc/prometheus/rules.yml
+    scrape_configs:
+{{ toYaml .Values.scrapeTargets | indent 6 }}
+  rules.yml: |
+    groups:
+    - name: videowall.rules
+      rules:
+{{- range $name, $cfg := .Values.alerts }}
+      - alert: {{ $name }}
+        expr: {{ $cfg.expr | quote }}
+        for: {{ $cfg.for | quote }}
+        labels:
+          severity: {{ $cfg.severity | quote }}
+        annotations:
+          summary: {{ $name | quote }}
+          description: {{ printf "Alert %s triggered" $name | quote }}
+{{- end }}

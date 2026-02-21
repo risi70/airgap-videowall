@@ -1,0 +1,43 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: vw-promtail
+  namespace: {{ .Values.namespace }}
+spec:
+  selector:
+    matchLabels: { app: vw-promtail }
+  template:
+    metadata:
+      labels: { app: vw-promtail }
+    spec:
+      serviceAccountName: default
+      containers:
+        - name: promtail
+          image: {{ .Values.images.promtail }}
+          args: ["-config.file=/etc/promtail/promtail.yml"]
+          ports:
+            - name: http
+              containerPort: 9080
+          volumeMounts:
+            - name: cfg
+              mountPath: /etc/promtail
+            - name: varlog
+              mountPath: /var/log
+              readOnly: true
+            - name: pods
+              mountPath: /var/log/pods
+              readOnly: true
+            - name: positions
+              mountPath: /run/promtail
+      volumes:
+        - name: cfg
+          configMap:
+            name: vw-promtail-config
+        - name: varlog
+          hostPath:
+            path: /var/log
+        - name: pods
+          hostPath:
+            path: /var/log/pods
+        - name: positions
+          emptyDir: {}

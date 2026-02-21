@@ -1,0 +1,22 @@
+[Unit]
+Description=Videowall Wall Controller
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=vw
+Group=vw
+WorkingDirectory=/opt/videowall/wallctl
+ExecStart=/usr/bin/python3 /opt/videowall/wallctl/vw_wallctl.py --config /opt/videowall/wallctl/wallctl.yml
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/videowall
+AmbientCapabilities=
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,14 @@
+source_id: "{{ inventory_hostname }}"
+mgmt_api: "{{ mgmt_api_url }}"
+health_interval_s: 5
+
+metadata:
+  type: "vdi-or-hdmi"
+  tags: ["lab"]
+
+probe_cmd: ""
+
+tls:
+  ca: "{{ ca_cert_path }}"
+  cert: "{{ vw_home }}/certs/client.crt"
+  key: "{{ vw_home }}/certs/client.key"

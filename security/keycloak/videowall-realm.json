@@ -1,0 +1,144 @@
+{
+  "realm": "videowall",
+  "enabled": true,
+  "displayName": "Videowall",
+  "registrationAllowed": false,
+  "loginWithEmailAllowed": false,
+  "duplicateEmailsAllowed": true,
+  "sslRequired": "external",
+  "accessTokenLifespan": 900,
+  "ssoSessionIdleTimeout": 1800,
+  "users": [
+    {
+      "username": "vw-admin",
+      "enabled": true,
+      "emailVerified": true,
+      "firstName": "Videowall",
+      "lastName": "Admin",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "changeme",
+          "temporary": true
+        }
+      ],
+      "attributes": {
+        "clearance_tags": [
+          "lab",
+          "operator"
+        ]
+      },
+      "groups": [
+        "vw-admins"
+      ]
+    }
+  ],
+  "roles": {
+    "realm": [
+      {
+        "name": "admin",
+        "description": "Platform administrator"
+      },
+      {
+        "name": "operator",
+        "description": "Platform operator"
+      },
+      {
+        "name": "viewer",
+        "description": "Read-only viewer"
+      }
+    ]
+  },
+  "groups": [
+    {
+      "name": "vw-admins",
+      "realmRoles": [
+        "admin"
+      ]
+    },
+    {
+      "name": "vw-operators",
+      "realmRoles": [
+        "operator"
+      ]
+    },
+    {
+      "name": "vw-viewers",
+      "realmRoles": [
+        "viewer"
+      ]
+    }
+  ],
+  "clients": [
+    {
+      "clientId": "vw-mgmt",
+      "name": "Videowall Management API",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "serviceAccountsEnabled": true,
+      "directAccessGrantsEnabled": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "bearerOnly": false,
+      "consentRequired": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "CHANGE_ME_CLIENT_SECRET",
+      "redirectUris": [
+        "https://mgmt-api.videowall.local/*"
+      ],
+      "webOrigins": [
+        "+"
+      ],
+      "attributes": {
+        "oauth2.device.authorization.grant.enabled": "false"
+      },
+      "defaultClientScopes": [
+        "profile",
+        "email"
+      ],
+      "optionalClientScopes": [
+        "address",
+        "phone",
+        "offline_access"
+      ]
+    }
+  ],
+  "clientScopes": [
+    {
+      "name": "clearance-tags-scope",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true"
+      },
+      "protocolMappers": [
+        {
+          "name": "clearance_tags",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "clearance_tags",
+            "claim.name": "clearance_tags",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "aggregate.attrs": "false"
+          }
+        }
+      ]
+    }
+  ],
+  "defaultDefaultClientScopes": [
+    "role_list",
+    "profile",
+    "email"
+  ],
+  "defaultOptionalClientScopes": [
+    "address",
+    "phone",
+    "offline_access"
+  ]
+}

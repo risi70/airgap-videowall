@@ -1,0 +1,83 @@
+{
+  "title": "Videowall Overview",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Active Walls",
+      "targets": [
+        {
+          "expr": "vw_active_walls"
+        }
+      ],
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Active Sources",
+      "targets": [
+        {
+          "expr": "vw_active_sources"
+        }
+      ],
+      "gridPos": {
+        "x": 6,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "SFU Sessions",
+      "targets": [
+        {
+          "expr": "vw_sfu_sessions"
+        }
+      ],
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 12,
+        "h": 6
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Gateway Ingests",
+      "targets": [
+        {
+          "expr": "vw_gateway_ingests"
+        }
+      ],
+      "gridPos": {
+        "x": 0,
+        "y": 10,
+        "w": 12,
+        "h": 6
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Compositor Frame Time (ms)",
+      "targets": [
+        {
+          "expr": "vw_compositor_frame_time_ms"
+        }
+      ],
+      "gridPos": {
+        "x": 0,
+        "y": 16,
+        "w": 12,
+        "h": 6
+      }
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vw-grafana-dashboards
+  namespace: {{ .Values.namespace }}
+data:
+  videowall-overview.json: |
+{{ .Files.Get "grafana-dashboards/videowall-overview.json" | indent 4 }}
+  videowall-alerts.json: |
+{{ .Files.Get "grafana-dashboards/videowall-alerts.json" | indent 4 }}

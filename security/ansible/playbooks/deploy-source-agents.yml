@@ -1,0 +1,4 @@
+- hosts: source_agents
+  become: true
+  roles:
+    - source-agent

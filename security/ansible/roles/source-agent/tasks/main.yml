@@ -1,0 +1,60 @@
+- name: Include common
+  import_role:
+    name: common
+
+- name: Install GStreamer + python
+  apt:
+    name:
+      - gstreamer1.0-tools
+      - gstreamer1.0-plugins-base
+      - gstreamer1.0-plugins-good
+      - gstreamer1.0-plugins-bad
+      - gstreamer1.0-plugins-ugly
+      - python3
+      - python3-pip
+    state: present
+    update_cache: true
+
+- name: Create directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - /opt/videowall/source-agent
+    - /opt/videowall/certs
+    - /opt/videowall/logs
+
+- name: Deploy agent
+  copy:
+    src: vw_source_agent.py
+    dest: /opt/videowall/source-agent/vw_source_agent.py
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Deploy agent config
+  template:
+    src: source-agent.yml.j2
+    dest: /opt/videowall/source-agent/source-agent.yml
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Deploy systemd unit
+  copy:
+    src: vw-source-agent.service
+    dest: /etc/systemd/system/vw-source-agent.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart source agent
+
+- name: Enable agent
+  systemd:
+    name: vw-source-agent
+    enabled: true
+    state: started
+    daemon_reload: true

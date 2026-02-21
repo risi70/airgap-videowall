@@ -1,0 +1,23 @@
+{
+  "title": "Videowall Alerts",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "panels": [
+    {
+      "type": "table",
+      "title": "Alert List",
+      "targets": [
+        {
+          "expr": "ALERTS"
+        }
+      ],
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 24,
+        "h": 12
+      }
+    }
+  ]
+}

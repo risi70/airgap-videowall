@@ -1,0 +1,17 @@
+[Unit]
+Description=Videowall Source Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/bin/python3 /opt/videowall/source-agent/vw_source_agent.py --config /opt/videowall/source-agent/source-agent.yml
+Restart=always
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/videowall
+
+[Install]
+WantedBy=multi-user.target

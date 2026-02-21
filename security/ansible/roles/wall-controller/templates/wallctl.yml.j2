@@ -1,0 +1,8 @@
+wall_id: "{{ inventory_hostname }}"
+mgmt_api: "{{ mgmt_api_url }}"
+heartbeat_interval_s: 5
+
+tls:
+  ca: "{{ ca_cert_path }}"
+  cert: "{{ vw_home }}/certs/client.crt"
+  key: "{{ vw_home }}/certs/client.key"

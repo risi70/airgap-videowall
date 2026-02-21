@@ -1,25 +1,32 @@
-# Module 3 — Endpoint Agents & Offline Bundle System
+# airgap-videowall — Module 4 (Security, Observability, Ops & Documentation)
 
-This bundle contains non-Kubernetes endpoint agents (Source Zone + Display Zone) and offline update tooling.
+This package contains the complete deliverables for **Module 4**:
+- Keycloak bootstrap
+- Vault PKI setup + rotation helper
+- Lab certificate generation
+- Ansible roles + playbooks
+- Observability Helm chart (Prometheus + Grafana + Loki/Promtail)
+- Runbooks + platform documentation
+- Sizing + test plans
+- Integration test docker-compose
+- Root Makefile targets (for module-4 concerns)
+
+> Runtime is **air-gapped**: all images must be mirrored to `registry.local:5000` and all artifacts transferred via approved media.
+
+## Quick start (lab)
+```bash
+make certs-init
+make vault-init
+make keycloak-init
+make deploy
+make test-integration
+```
 
 ## Layout
-
-- agents/wallctl/        Wall controller agent (systemd service)
-- agents/tile-player/   Tile player wrapper (systemd template unit per tile)
-- agents/big-player/    Big screen player wrapper
-- agents/vdi-encoder/   VDI capture+encode (GStreamer) with /healthz and /metrics
-- agents/sourcereg/     Source registration + heartbeat
-- tools/bundlectl/      Offline signed bundle CLI (tar.zst + ed25519)
-- scripts/              Image mirroring + offline deps + rollout/rollback
-
-## Install layout (suggested)
-
-- /opt/videowall/agents/...          (code)
-- /etc/videowall/<agent>/config.yaml (config)
-- /etc/videowall/pki/*               (mTLS)
-- /var/lib/<agent>                   (state)
-
-## Notes
-
-- All HTTP calls assume **mTLS** to mgmt/health endpoints.
-- Tile player/big player commands are placeholders; adapt stream URL templates to your SFU/gateway wiring.
+- `security/keycloak/` — realm export + bootstrap
+- `security/vault/` — PKI setup + rotate helper
+- `security/certs/` — lab cert generator (offline)
+- `security/ansible/` — Ansible inventory + roles + playbooks
+- `charts/vw-observability/` — Helm chart
+- `docs/` — architecture/security/operations/sizing/testing/ports allowlist + runbooks
+- `tests/integration/` — docker-compose + smoke tests

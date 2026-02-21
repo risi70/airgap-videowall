@@ -1,0 +1,8 @@
+- hosts: all
+  become: true
+  vars:
+    vlan_id: 120
+    parent_interface: "ens192"
+    ip_address: "10.50.120.10/24"
+  roles:
+    - vlan-config

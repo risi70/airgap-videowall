@@ -1,76 +1,122 @@
-# Module 2 Architecture (Media Plane)
+# Architecture
 
-## Sequence: source → gateway → SFU → tile player
-
-```mermaid
-sequenceDiagram
-    participant S as Source (RTSP/SRT/RTP)
-    participant GW as vw-gw (GStreamer Gateway)
-    participant SFU as vw-sfu-janus (Janus)
-    participant TP as Tile Player (Display Zone)
-
-    Note over GW: /probe uses ffprobe (10s timeout)
-    GW->>S: Pull input (RTSP/SRT/RTP)
-    GW->>GW: Depay/parse/mux
-    GW->>SFU: (Optional) publish stream as WebRTC (future integration)
-    SFU->>TP: WebRTC signaling (HTTP/WS) + RTP media (20000-20200/UDP)
-```
-
-## Sequence: compositor policy check → pull sources → SRT output
-
-```mermaid
-sequenceDiagram
-    participant OP as Operator (via mgmt-api)
-    participant COMP as vw-compositor
-    participant POL as vw-policy (vw-control)
-    participant SRC as Source
-    participant OUT as SRT Sink / Decoder
-
-    OP->>COMP: POST /mosaics (inputs[])
-    loop for each input.source_id
-      COMP->>POL: POST /evaluate {source_id, action}
-      POL-->>COMP: allow/deny
-    end
-    alt any denied
-      COMP-->>OP: 403 denied
-    else all allowed
-      OP->>COMP: POST /mosaics/{id}/start
-      COMP->>SRC: Pull sources (RTSP/SRT)
-      COMP->>OUT: Push mosaic as SRT MPEG-TS
-    end
-```
-
-## Component view (Module 2)
+## Component view
 
 ```mermaid
 flowchart LR
-  subgraph SZ[Source Zone]
-    SRC1[RTSP Source]
-    SRC2[SRT Encoder]
+  subgraph SZ["Source Zone"]
+    SA["Source Agent (VDI / HDMI encoder)\nTLS+mTLS\nGStreamer"]
+    ENC["HDMI-to-IP Encoder\nRTSP/SRT"]
   end
 
-  subgraph MC[vw-media (Kubernetes)]
-    GW[vw-gw :8004]
-    COMP[vw-compositor :8005]
-    SFU[vw-sfu-janus :8088/:8188\nRTP 20000-20200/UDP]
+  subgraph MC["Media Core Zone (Kubernetes)"]
+    subgraph VWCTL["vw-control namespace"]
+      MGMT["vw-mgmt-api\nFastAPI\nOIDC JWT validation\nPolicy PEP"]
+      POL["vw-policy\nABAC/RBAC engine"]
+      AUD["vw-audit\nappend-only hash chain"]
+      HLTH["vw-health\nhealth aggregation"]
+      KC["Keycloak\nOIDC"]
+      VA["Vault PKI\nCA + issuance"]
+      PG["PostgreSQL 15"]
+    end
+
+    subgraph VWM["vw-media namespace"]
+      SFU["Janus SFU\nWebRTC"]
+      GW["GStreamer Gateway\nRTSP/RTP/SRT ingest"]
+      COMP["Compositor\nMosaic render"]
+    end
+
+    subgraph OBS["vw-obs namespace"]
+      PROM["Prometheus"]
+      GRAF["Grafana"]
+      LOKI["Loki"]
+      PT["Promtail"]
+    end
   end
 
-  subgraph CZ[vw-control]
-    POL[vw-policy :8002]
-    MGMT[vw-mgmt-api]
+  subgraph DZ["Display Zone"]
+    WC["Wall Controller\nheartbeat + layout"]
+    TP["Tile Player\nmpv/kiosk"]
+    BS["Big Screen Player\n4K"]
   end
 
-  subgraph DZ[vw-display]
-    TP[Tile Player / Decoder]
-  end
+  SA -->|mTLS + REST| MGMT
+  ENC -->|RTSP/SRT| GW
+  SA -->|RTP/SRT| GW
+  GW -->|WebRTC/RTP| SFU
+  SFU -->|Media| TP
+  SFU -->|Media| BS
+  MGMT <--> POL
+  MGMT --> AUD
+  MGMT <--> PG
+  MGMT -->|OIDC| KC
+  MGMT -->|cert issue| VA
 
-  MGMT -->|HTTP 8004| GW
-  MGMT -->|HTTP 8005| COMP
-  MGMT -->|HTTP/WS 8088/8188| SFU
-
-  COMP -->|HTTP 8002| POL
-  GW -->|RTSP/SRT/RTP| SZ
-  COMP -->|RTSP/SRT| SZ
-  SFU -->|RTP 20000-20200| TP
-  TP -->|HTTP/WS 8088/8188| SFU
+  MGMT -->|/metrics| PROM
+  SFU -->|/metrics| PROM
+  GW -->|/metrics| PROM
+  COMP -->|/metrics| PROM
+  PT -->|logs| LOKI
+  GRAF -->|queries| PROM
+  GRAF -->|logs| LOKI
 ```
+
+## Sequences
+
+### a) Operator assigns source to wall
+```mermaid
+sequenceDiagram
+  actor Op as Operator
+  participant UI as Mgmt UI
+  participant KC as Keycloak
+  participant MG as vw-mgmt-api
+  participant PL as vw-policy
+  participant AU as vw-audit
+  Op->>UI: Select wall + source
+  UI->>KC: OIDC auth
+  KC-->>UI: JWT (roles + clearance_tags)
+  UI->>MG: POST /walls/{id}/assign (JWT)
+  MG->>PL: Evaluate ABAC/RBAC (wall, source, tags)
+  PL-->>MG: allow/deny
+  alt allow
+    MG->>AU: Append audit record + hash
+    MG-->>UI: 200 OK (assignment)
+  else deny
+    MG-->>UI: 403 Forbidden
+  end
+```
+
+### b) Tile player subscribes
+```mermaid
+sequenceDiagram
+  participant TP as Tile Player
+  participant WC as Wall Controller
+  participant MG as vw-mgmt-api
+  participant PL as vw-policy
+  TP->>WC: Request playback details (local)
+  WC->>MG: Request subscribe token (mTLS)
+  MG->>PL: Evaluate subscription authorization
+  PL-->>MG: allow + constraints
+  MG-->>WC: Signed subscribe token + URL
+  WC-->>TP: URL + token
+  TP->>MG: (optional) validate token freshness
+  TP->>SFU: Subscribe/play (token)
+```
+
+### c) Compositor renders mosaic
+```mermaid
+sequenceDiagram
+  participant COMP as Compositor
+  participant MG as vw-mgmt-api
+  participant SFU as SFU
+  MG-->>COMP: Desired mosaic layout + source streams
+  COMP->>SFU: Pull/subscribe inputs
+  SFU-->>COMP: Media frames
+  COMP-->>SFU: Composite output stream
+  SFU-->>Players: Per-tile/big-screen streams
+```
+
+## Data flow notes
+- Control plane uses **mTLS** between services and agents.
+- Operator plane uses **OIDC** (Keycloak) to obtain JWT; mgmt-api validates and enforces RBAC/ABAC.
+- Media plane uses WebRTC/SRTP (interactive) or RTP/SRT (lower complexity) depending on endpoint class.

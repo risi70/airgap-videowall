@@ -1,0 +1,4 @@
+- name: Restart source agent
+  systemd:
+    name: vw-source-agent
+    state: restarted

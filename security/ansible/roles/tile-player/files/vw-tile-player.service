@@ -1,0 +1,19 @@
+[Unit]
+Description=Videowall Tile Player (mpv kiosk)
+After=graphical.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=DISPLAY=:0
+ExecStart=/bin/bash -lc "/opt/videowall/player/vw_tile_player.sh"
+Restart=always
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/videowall
+
+[Install]
+WantedBy=graphical.target

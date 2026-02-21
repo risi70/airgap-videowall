@@ -1,0 +1,16 @@
+registry_url: "registry.local:5000"
+mgmt_api_url: "https://mgmt-api.videowall.local"
+health_url: "https://mgmt-api.videowall.local/health"
+ca_cert_path: "/etc/ssl/certs/videowall-ca-chain.pem"
+ntp_server: "10.50.0.10"
+
+vw_user: "vw"
+vw_group: "vw"
+vw_home: "/opt/videowall"
+
+# Optional: path to rotated certs (rotate-certs.sh sets cert_src)
+cert_src: ""
+
+# Default media endpoints
+sfu_url: "wss://sfu.videowall.local/ws"
+gateway_url: "https://gateway.videowall.local"

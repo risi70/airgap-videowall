@@ -1,27 +1,20 @@
-# Ports allowlist / matrix (airgap-videowall)
+# Ports allow-list (matrix)
 
-> Complete this table with site-specific CIDRs and external boundary firewall rules.
-> Kubernetes **NetworkPolicies** provided by the charts implement the *in-cluster* portion.
+> This table is the baseline for firewall and NetworkPolicy allow-listing.
+> Adjust to your exact implementation details.
 
-| Zone | Component | Port(s) | Proto | Direction | Peer / Notes |
-|---|---|---:|---|---|---|
-| Source Zone | VDI sources (e.g., RTSP endpoints) | 554 | TCP | Ingress to Source | From `vw-gw` / `vw-compositor` egress |
-| Source Zone | HDMI-to-IP encoders (SRT) | 1024-65535 (as configured) | UDP | Ingress to Source | From `vw-gw` / `vw-compositor` |
-| Media Core (vw-media) | **vw-gw** (gateway API) | 8004 | TCP | Ingress to `vw-gw` | From `vw-mgmt-api` |
-| Media Core (vw-media) | **vw-gw** egress | 554, 80, 443, SRT ports | TCP/UDP | Egress from `vw-gw` | To Source Zone IP ranges |
-| Media Core (vw-media) | **vw-compositor** (API) | 8005 | TCP | Ingress | From `vw-mgmt-api` |
-| Media Core (vw-media) | **vw-compositor** → policy service | 8002 | TCP | Egress | To `vw-policy` |
-| Media Core (vw-media) | **vw-sfu-janus** HTTP | 8088 | TCP | Ingress | From `vw-mgmt-api` and Display Zone clients |
-| Media Core (vw-media) | **vw-sfu-janus** WebSocket | 8188 | TCP | Ingress | From Display Zone clients |
-| Media Core (vw-media) | **vw-sfu-janus** RTP | 20000-20200 | UDP | Ingress/Egress | RTP/RTCP between Janus and clients (no STUN/TURN; LAN ICE Lite) |
-| Control Plane (vw-control) | Keycloak | 8080/8443 | TCP | Ingress | Operators / internal services |
-| Control Plane (vw-control) | Vault | 8200 | TCP | Ingress | Internal services (mTLS cert issuance) |
-| Control Plane (vw-control) | PostgreSQL | 5432 | TCP | Ingress | From control/media services that persist data |
-| Observability (vw-obs) | Prometheus | 9090 | TCP | Ingress | Operators / Grafana |
-| Observability (vw-obs) | Grafana | 3000 | TCP | Ingress | Operators |
-| Display Zone | Tile player / decoder | (varies) | TCP/UDP | Egress | To Janus 8088/8188 and RTP range |
-
-## Notes
-
-- Use **default deny** namespace policies (recommended) and then per-app allowlists as shipped.
-- For air-gapped systems, ensure no egress to Internet at the node/firewall level; NetworkPolicy alone is not a perimeter control.
+| From | To | Zone | Direction | Proto | Port | Purpose |
+|---|---|---|---|---|---:|---|
+| Operator VLAN | Grafana | Media Core | Ingress | TCP | 3000 | Dashboards (restricted) |
+| Operator VLAN | Keycloak | Media Core | Ingress | TCP | 8080/8443 | OIDC login/admin |
+| Operator VLAN | Vault | Media Core | Ingress | TCP | 8200 | PKI issuance/admin |
+| Wall Controller | mgmt-api | Display→Core | Egress | TCP | 8443 | Heartbeat, layout, token |
+| Source Agent | mgmt-api | Source→Core | Egress | TCP | 8443 | Register, health |
+| HDMI Encoder | Gateway | Source→Core | Egress | TCP/UDP | 554 / (SRT 9000-9100) | RTSP/SRT ingest |
+| Gateway | SFU | Core internal | East/West | UDP/TCP | 10000-20000 | Media forwarding (WebRTC/RTP) |
+| SFU | Players | Core→Display | Egress | UDP/TCP | 10000-20000 | Media to endpoints |
+| Prometheus | all services | Obs→Core | Egress | TCP | 8443/metrics | Scrape metrics |
+| Promtail | Loki | Obs internal | Egress | TCP | 3100 | Push logs |
+| Grafana | Prometheus | Obs internal | Egress | TCP | 9090 | Query metrics |
+| Grafana | Loki | Obs internal | Egress | TCP | 3100 | Query logs |
+| Services | PostgreSQL | Core internal | Egress | TCP | 5432 | DB |

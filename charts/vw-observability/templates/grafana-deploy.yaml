@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vw-grafana
+  namespace: {{ .Values.namespace }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: vw-grafana }
+  template:
+    metadata:
+      labels: { app: vw-grafana }
+    spec:
+      containers:
+        - name: grafana
+          image: {{ .Values.images.grafana }}
+          env:
+            - name: GF_SECURITY_ADMIN_USER
+              value: {{ .Values.grafana.adminUser | quote }}
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              value: {{ .Values.grafana.adminPassword | quote }}
+            - name: GF_AUTH_ANONYMOUS_ENABLED
+              value: "false"
+            - name: GF_SERVER_ROOT_URL
+              value: "http://vw-grafana.{{ .Values.namespace }}.svc:3000"
+            - name: GF_PATHS_PROVISIONING
+              value: "/etc/grafana/provisioning"
+          ports:
+            - name: http
+              containerPort: 3000
+          volumeMounts:
+            - name: prov
+              mountPath: /etc/grafana/provisioning/datasources/datasources.yml
+              subPath: datasources.yml
+            - name: prov
+              mountPath: /etc/grafana/provisioning/dashboards/dashboards.yml
+              subPath: dashboards.yml
+            - name: dashboards
+              mountPath: /var/lib/grafana/dashboards
+          readinessProbe:
+            httpGet: { path: /api/health, port: 3000 }
+            initialDelaySeconds: 10
+            periodSeconds: 5
+      volumes:
+        - name: prov
+          configMap:
+            name: vw-grafana-provisioning
+        - name: dashboards
+          configMap:
+            name: vw-grafana-dashboards

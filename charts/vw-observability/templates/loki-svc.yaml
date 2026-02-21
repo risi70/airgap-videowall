@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: vw-loki
+  namespace: {{ .Values.namespace }}
+spec:
+  selector: { app: vw-loki }
+  ports:
+    - name: http
+      port: 3100
+      targetPort: 3100

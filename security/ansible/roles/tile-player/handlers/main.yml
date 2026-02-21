@@ -1,0 +1,9 @@
+- name: Restart tile player
+  systemd:
+    name: vw-tile-player
+    state: restarted
+
+- name: Restart lightdm
+  systemd:
+    name: lightdm
+    state: restarted

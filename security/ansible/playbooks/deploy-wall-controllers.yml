@@ -1,0 +1,4 @@
+- hosts: wall_controllers
+  become: true
+  roles:
+    - wall-controller

@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: vw-prometheus
+  namespace: {{ .Values.namespace }}
+spec:
+  type: {{ .Values.service.type }}
+  selector: { app: vw-prometheus }
+  ports:
+    - name: http
+      port: 9090
+      targetPort: 9090

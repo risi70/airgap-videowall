@@ -1,0 +1,4 @@
+- name: Restart wallctl
+  systemd:
+    name: vw-wallctl
+    state: restarted

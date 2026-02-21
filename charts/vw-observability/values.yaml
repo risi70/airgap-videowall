@@ -1,0 +1,70 @@
+namespace: vw-obs
+
+images:
+  prometheus: "registry.local:5000/prom/prometheus:v2.53.0"
+  grafana: "registry.local:5000/grafana/grafana:11.1.0"
+  loki: "registry.local:5000/grafana/loki:3.1.0"
+  promtail: "registry.local:5000/grafana/promtail:3.1.0"
+
+service:
+  type: ClusterIP
+
+grafana:
+  adminUser: "admin"
+  adminPassword: "changeme"
+  ingress:
+    enabled: false
+    host: "grafana.videowall.local"
+  allowedCIDRs:
+    - "10.50.10.0/24"   # operator VLAN (example)
+
+prometheus:
+  scrapeInterval: 15s
+  retention: 7d
+
+loki:
+  retention: 168h
+
+scrapeTargets:
+  - job_name: "vw-control-mgmt-api"
+    metrics_path: "/metrics"
+    scheme: "https"
+    static_configs:
+      - targets: ["vw-mgmt-api.vw-control.svc:8443"]
+  - job_name: "vw-media-sfu"
+    metrics_path: "/metrics"
+    scheme: "https"
+    static_configs:
+      - targets: ["vw-sfu.vw-media.svc:8443"]
+  - job_name: "vw-media-gateway"
+    metrics_path: "/metrics"
+    scheme: "https"
+    static_configs:
+      - targets: ["vw-gateway.vw-media.svc:8443"]
+  - job_name: "vw-media-compositor"
+    metrics_path: "/metrics"
+    scheme: "https"
+    static_configs:
+      - targets: ["vw-compositor.vw-media.svc:8443"]
+
+alerts:
+  StreamLost:
+    expr: 'vw_source_health_status{status!="online"} == 1'
+    for: "60s"
+    severity: "critical"
+  HighPacketLoss:
+    expr: 'vw_sfu_packet_loss_ratio > 0.05'
+    for: "30s"
+    severity: "warning"
+  CompositorFrameTime:
+    expr: 'vw_compositor_frame_time_ms > 33'
+    for: "60s"
+    severity: "warning"
+  WallOffline:
+    expr: 'vw_wall_heartbeat_age_seconds > 30'
+    for: "30s"
+    severity: "critical"
+  AuditChainBroken:
+    expr: 'vw_audit_chain_ok == 0'
+    for: "10s"
+    severity: "critical"

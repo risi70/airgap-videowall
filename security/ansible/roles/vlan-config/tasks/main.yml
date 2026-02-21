@@ -1,0 +1,10 @@
+- name: Template netplan VLAN config
+  template:
+    src: 99-videowall.yaml.j2
+    dest: /etc/netplan/99-videowall.yaml
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Apply netplan
+  command: netplan apply

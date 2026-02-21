@@ -1,0 +1,102 @@
+- name: Include common
+  import_role:
+    name: common
+
+- name: Ensure vw user/group
+  user:
+    name: "{{ vw_user }}"
+    group: "{{ vw_group }}"
+    create_home: false
+    system: true
+  register: vw_user_created
+  failed_when: false
+
+- name: Create install directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ vw_user }}"
+    group: "{{ vw_group }}"
+    mode: "0755"
+  loop:
+    - "{{ vw_home }}/wallctl"
+    - "{{ vw_home }}/certs"
+    - "{{ vw_home }}/logs"
+
+- name: Install runtime dependencies (mpv + X)
+  apt:
+    name:
+      - mpv
+      - xorg
+      - openbox
+      - unclutter
+    state: present
+    update_cache: true
+
+- name: Deploy wall controller script
+  copy:
+    src: vw_wallctl.py
+    dest: "{{ vw_home }}/wallctl/vw_wallctl.py"
+    owner: "{{ vw_user }}"
+    group: "{{ vw_group }}"
+    mode: "0755"
+
+- name: Deploy wall controller config
+  template:
+    src: wallctl.yml.j2
+    dest: "{{ vw_home }}/wallctl/wallctl.yml"
+    owner: "{{ vw_user }}"
+    group: "{{ vw_group }}"
+    mode: "0644"
+
+- name: Deploy certs (lab)
+  copy:
+    src: "{{ playbook_dir }}/../../certs/certs/lab/{{ inventory_hostname }}.crt"
+    dest: "{{ vw_home }}/certs/client.crt"
+    owner: "{{ vw_user }}"
+    group: "{{ vw_group }}"
+    mode: "0644"
+  when: cert_src == ""
+
+- name: Deploy key (lab)
+  copy:
+    src: "{{ playbook_dir }}/../../certs/certs/lab/{{ inventory_hostname }}.key"
+    dest: "{{ vw_home }}/certs/client.key"
+    owner: "{{ vw_user }}"
+    group: "{{ vw_group }}"
+    mode: "0600"
+  when: cert_src == ""
+
+- name: Deploy certs (rotated)
+  copy:
+    src: "{{ cert_src }}/{{ inventory_hostname }}.videowall.local.crt"
+    dest: "{{ vw_home }}/certs/client.crt"
+    owner: "{{ vw_user }}"
+    group: "{{ vw_group }}"
+    mode: "0644"
+  when: cert_src != ""
+
+- name: Deploy key (rotated)
+  copy:
+    src: "{{ cert_src }}/{{ inventory_hostname }}.videowall.local.key"
+    dest: "{{ vw_home }}/certs/client.key"
+    owner: "{{ vw_user }}"
+    group: "{{ vw_group }}"
+    mode: "0600"
+  when: cert_src != ""
+
+- name: Install systemd unit
+  copy:
+    src: vw-wallctl.service
+    dest: /etc/systemd/system/vw-wallctl.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart wallctl
+
+- name: Enable wall controller
+  systemd:
+    name: vw-wallctl
+    enabled: true
+    state: started
+    daemon_reload: true

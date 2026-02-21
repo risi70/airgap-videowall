@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vw-grafana-provisioning
+  namespace: {{ .Values.namespace }}
+data:
+  datasources.yml: |
+    apiVersion: 1
+    datasources:
+      - name: Prometheus
+        type: prometheus
+        access: proxy
+        url: http://vw-prometheus.{{ .Values.namespace }}.svc:9090
+        isDefault: true
+  dashboards.yml: |
+    apiVersion: 1
+    providers:
+      - name: videowall
+        folder: Videowall
+        type: file
+        options:
+          path: /var/lib/grafana/dashboards

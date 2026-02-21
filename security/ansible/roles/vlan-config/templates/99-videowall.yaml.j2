@@ -1,0 +1,13 @@
+network:
+  version: 2
+  ethernets:
+    {{ parent_interface }}:
+      dhcp4: no
+
+  vlans:
+    {{ parent_interface }}.{{ vlan_id }}:
+      id: {{ vlan_id }}
+      link: {{ parent_interface }}
+      addresses:
+        - {{ ip_address }}
+      mtu: 1500

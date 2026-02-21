@@ -1,0 +1,6 @@
+# Private keys
+certs/lab/**/*.key
+certs/lab/**/*-key.pem
+certs/lab/bundle-signing-key.pem
+certs/lab/**/*.p12
+certs/lab/**/*.pkcs8

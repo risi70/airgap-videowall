@@ -1,0 +1,4 @@
+- hosts: tile_players
+  become: true
+  roles:
+    - tile-player

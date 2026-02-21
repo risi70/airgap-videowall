@@ -1,0 +1,60 @@
+- name: Include common
+  import_role:
+    name: common
+
+- name: Install mpv + X kiosk deps
+  apt:
+    name:
+      - mpv
+      - xorg
+      - openbox
+      - x11-xserver-utils
+      - unclutter
+      - lightdm
+    state: present
+    update_cache: true
+
+- name: Create videowall directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - /opt/videowall/player
+    - /opt/videowall/certs
+    - /opt/videowall/logs
+
+- name: Deploy player script
+  copy:
+    src: vw_tile_player.sh
+    dest: /opt/videowall/player/vw_tile_player.sh
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Deploy systemd unit
+  copy:
+    src: vw-tile-player.service
+    dest: /etc/systemd/system/vw-tile-player.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart tile player
+
+- name: Configure lightdm autologin (kiosk)
+  copy:
+    src: lightdm.conf
+    dest: /etc/lightdm/lightdm.conf.d/99-videowall-kiosk.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart lightdm
+
+- name: Enable player service
+  systemd:
+    name: vw-tile-player
+    enabled: true
+    state: started
+    daemon_reload: true

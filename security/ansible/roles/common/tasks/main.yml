@@ -1,0 +1,47 @@
+- name: Install base packages
+  apt:
+    name:
+      - ca-certificates
+      - curl
+      - jq
+      - python3
+      - python3-venv
+      - python3-pip
+      - chrony
+    update_cache: true
+    state: present
+
+- name: Configure chrony NTP server
+  lineinfile:
+    path: /etc/chrony/chrony.conf
+    regexp: '^pool '
+    line: "server {{ ntp_server }} iburst"
+  notify: Restart chrony
+
+- name: Ensure chrony is enabled
+  systemd:
+    name: chrony
+    enabled: true
+    state: started
+
+- name: Install CA trust chain
+  copy:
+    src: "{{ playbook_dir }}/../../certs/certs/lab/ca-chain.pem"
+    dest: "{{ ca_cert_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: cert_src == ""
+
+- name: Install CA trust chain (from rotated dir)
+  copy:
+    src: "{{ cert_src }}/mgmt-api.videowall.local.ca"
+    dest: "{{ ca_cert_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+  when: cert_src != ""
+
+- name: Update CA certificates
+  command: update-ca-certificates
+  changed_when: false
