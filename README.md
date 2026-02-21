@@ -18,6 +18,14 @@ An **air-gapped, open-source multi-videowall platform** for high-security enclav
 
 ---
 
+## Dynamic Configuration
+
+Wall counts, source definitions, codec policies, and ABAC rules are **declaratively configured via YAML** — no code changes needed to scale. Edit `config/examples/platform-config.yaml`, validate with `POST /api/v1/config/dry-run`, and apply. The `vw-config` Configuration Authority validates, watches, and distributes config to all services.
+
+See [`docs/architecture.md`](docs/architecture.md) for the full dynamic configuration model, hot-reload strategy, and config lifecycle.
+
+---
+
 ## Architecture
 
 The platform follows a **Combined C+D** topology: Janus SFU for per-tile distribution + GStreamer compositor for large-screen mosaics, unified under a single control plane.

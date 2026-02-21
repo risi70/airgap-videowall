@@ -1,0 +1,114 @@
+global:
+  registry: registry.local:5000
+  imageTag: "latest"
+  imagePullPolicy: IfNotPresent
+
+replicaCount: 1
+
+image:
+  repository: vw-config
+
+service:
+  type: ClusterIP
+  port: 8006
+
+vault:
+  enabled: true
+  role: ""
+  pkiPath: "pki_int/issue/server-cert"
+
+# ──────────────────────────────────────────────────────────────
+# Platform configuration — delivered via ConfigMap
+# Set configSource to "inline" to embed config in this values file,
+# or "configmap" to reference an existing ConfigMap by name.
+# ──────────────────────────────────────────────────────────────
+configSource: "inline"           # inline | configmap
+existingConfigMap: ""            # Name of existing ConfigMap (when configSource=configmap)
+configPollInterval: 5            # Seconds between file change checks
+
+# Inline platform config — edit this to change wall/source counts
+# without touching any application code.
+platformConfig: |
+  platform:
+    version: "1.0.0"
+    max_concurrent_streams: 64
+    codec_policy:
+      tiles: h264
+      mosaics: hevc
+    latency_classes:
+      interactive_max_ms: 500
+      broadcast_max_ms: 6000
+
+  walls:
+    - id: wall-alpha
+      type: tiles
+      classification: confidential
+      grid: { rows: 6, cols: 4 }
+      resolution: 1920x1080
+      latency_class: interactive
+      tags: { mission: alpha, room: ops-center }
+
+    - id: wall-bravo
+      type: tiles
+      classification: secret
+      grid: { rows: 6, cols: 4 }
+      resolution: 1920x1080
+      latency_class: interactive
+      tags: { mission: bravo, room: intel-center }
+
+    - id: wall-charlie
+      type: bigscreen
+      classification: confidential
+      screens: 2
+      resolution: 3840x2160
+      latency_class: broadcast
+      tags: { mission: alpha, room: exec-briefing }
+
+    - id: wall-delta
+      type: bigscreen
+      classification: unclassified
+      screens: 2
+      resolution: 3840x2160
+      latency_class: broadcast
+      tags: { mission: training, room: training-center }
+
+  sources:
+    - id: vdi-01
+      type: webrtc
+      codec: h264
+      bitrate_kbps: 6000
+      tags: { classification: confidential, mission: alpha, origin: vdi }
+    - id: vdi-02
+      type: webrtc
+      codec: h264
+      bitrate_kbps: 6000
+      tags: { classification: confidential, mission: alpha, origin: vdi }
+    - id: hdmi-01
+      type: srt
+      endpoint: "srt://10.10.10.20:9000"
+      bitrate_kbps: 8000
+      tags: { classification: confidential, mission: alpha, origin: hdmi }
+
+  policy:
+    taxonomy:
+      classifications: ["unclassified", "restricted", "confidential", "secret"]
+      missions: ["alpha", "bravo", "training"]
+    rules:
+      - id: rule-clearance
+        effect: allow
+        when: { source_tags_subset_of_operator_tags: true }
+      - id: rule-mission-match
+        effect: allow
+        when: { source_tags_intersect_wall_tags: true, match_key: mission }
+      - id: rule-default-deny
+        effect: deny
+        when: { always: true }
+
+resources:
+  requests:
+    cpu: "100m"
+    memory: "128Mi"
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000

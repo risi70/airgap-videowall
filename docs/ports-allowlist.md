@@ -1,20 +1,26 @@
-# Ports allow-list (matrix)
+# Ports Allow-List (Matrix)
 
-> This table is the baseline for firewall and NetworkPolicy allow-listing.
-> Adjust to your exact implementation details.
+> Baseline for firewall and NetworkPolicy allow-listing.
+> Adjust to your implementation. Source/wall/stream counts are config-driven.
 
-| From | To | Zone | Direction | Proto | Port | Purpose |
-|---|---|---|---|---|---:|---|
-| Operator VLAN | Grafana | Media Core | Ingress | TCP | 3000 | Dashboards (restricted) |
-| Operator VLAN | Keycloak | Media Core | Ingress | TCP | 8080/8443 | OIDC login/admin |
-| Operator VLAN | Vault | Media Core | Ingress | TCP | 8200 | PKI issuance/admin |
-| Wall Controller | mgmt-api | Display→Core | Egress | TCP | 8443 | Heartbeat, layout, token |
-| Source Agent | mgmt-api | Source→Core | Egress | TCP | 8443 | Register, health |
-| HDMI Encoder | Gateway | Source→Core | Egress | TCP/UDP | 554 / (SRT 9000-9100) | RTSP/SRT ingest |
-| Gateway | SFU | Core internal | East/West | UDP/TCP | 10000-20000 | Media forwarding (WebRTC/RTP) |
-| SFU | Players | Core→Display | Egress | UDP/TCP | 10000-20000 | Media to endpoints |
-| Prometheus | all services | Obs→Core | Egress | TCP | 8443/metrics | Scrape metrics |
-| Promtail | Loki | Obs internal | Egress | TCP | 3100 | Push logs |
-| Grafana | Prometheus | Obs internal | Egress | TCP | 9090 | Query metrics |
-| Grafana | Loki | Obs internal | Egress | TCP | 3100 | Query logs |
-| Services | PostgreSQL | Core internal | Egress | TCP | 5432 | DB |
+| From | To | Zone | Proto | Port | Purpose |
+|---|---|---|---|---:|---|
+| Operator VLAN | Grafana | Media Core | TCP | 3000 | Dashboards |
+| Operator VLAN | Keycloak | Media Core | TCP | 8080/8443 | OIDC login |
+| Operator VLAN | Vault | Media Core | TCP | 8200 | PKI admin |
+| Wall Controller | mgmt-api | Display→Core | TCP | 8443 | Heartbeat, layout, tokens |
+| Wall Controller | vw-config | Display→Core | TCP | 8006 | Fetch wall config |
+| Source Agent | mgmt-api | Source→Core | TCP | 8443 | Register, health |
+| HDMI Encoder | Gateway | Source→Core | TCP/UDP | 554/9000-9100 | RTSP/SRT ingest |
+| Gateway | SFU | Core internal | UDP/TCP | 10000-20200 | Media forwarding |
+| SFU | Players | Core→Display | UDP/TCP | 10000-20200 | Media to endpoints |
+| mgmt-api | vw-config | Core internal | TCP | 8006 | Fetch wall/source config |
+| mgmt-api | policy | Core internal | TCP | 8001 | Policy evaluation |
+| mgmt-api | audit | Core internal | TCP | 8002 | Audit logging |
+| compositor | policy | Core internal | TCP | 8001 | Input authorization |
+| compositor | vw-config | Core internal | TCP | 8006 | Fetch bigscreen config |
+| Prometheus | all services | Obs→Core | TCP | 8443/metrics | Scrape |
+| Promtail | Loki | Obs internal | TCP | 3100 | Push logs |
+| Grafana | Prometheus | Obs internal | TCP | 9090 | Query metrics |
+| Grafana | Loki | Obs internal | TCP | 3100 | Query logs |
+| Services | PostgreSQL | Core internal | TCP | 5432 | DB |

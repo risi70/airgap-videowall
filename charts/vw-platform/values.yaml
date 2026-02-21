@@ -53,6 +53,7 @@ vault:
 vw-sfu-janus: {}
 vw-gw: {}
 vw-compositor: {}
+vw-config: {}                  # Configuration Authority
 
 vw-vault:
   enabled: true           # Set false when using external Vault

@@ -1,0 +1,207 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://airgap-videowall.local/schemas/platform-config.json",
+  "title": "Videowall Platform Configuration",
+  "description": "Declarative configuration for the air-gapped multi-videowall platform. Defines walls, sources, codec policies, ABAC rules, and concurrency limits. All values are dynamically reloadable without code changes.",
+  "type": "object",
+  "required": ["platform", "walls", "sources"],
+  "additionalProperties": false,
+  "properties": {
+    "platform": {
+      "type": "object",
+      "required": ["version"],
+      "additionalProperties": false,
+      "properties": {
+        "version": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+$",
+          "description": "Semantic version of this configuration"
+        },
+        "max_concurrent_streams": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 1024,
+          "default": 64,
+          "description": "Maximum concurrent media streams across all walls"
+        },
+        "codec_policy": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "tiles": {
+              "type": "string",
+              "enum": ["h264", "hevc", "av1", "vp8", "vp9"],
+              "default": "h264",
+              "description": "Codec for per-tile SFU streams"
+            },
+            "mosaics": {
+              "type": "string",
+              "enum": ["h264", "hevc", "av1"],
+              "default": "hevc",
+              "description": "Codec for compositor mosaic output"
+            }
+          }
+        },
+        "latency_classes": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "interactive_max_ms": {
+              "type": "integer", "minimum": 50, "maximum": 5000, "default": 500
+            },
+            "broadcast_max_ms": {
+              "type": "integer", "minimum": 500, "maximum": 30000, "default": 6000
+            }
+          }
+        }
+      }
+    },
+
+    "walls": {
+      "type": "array",
+      "minItems": 0,
+      "items": {
+        "type": "object",
+        "required": ["id", "type"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,62}$",
+            "description": "Unique wall identifier"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["tiles", "bigscreen"],
+            "description": "Wall type: tile-grid (SFU) or big-screen (compositor)"
+          },
+          "classification": {
+            "type": "string",
+            "description": "Security classification level"
+          },
+          "grid": {
+            "type": "object",
+            "description": "Grid dimensions (required for type=tiles)",
+            "required": ["rows", "cols"],
+            "additionalProperties": false,
+            "properties": {
+              "rows": { "type": "integer", "minimum": 1, "maximum": 20 },
+              "cols": { "type": "integer", "minimum": 1, "maximum": 20 }
+            }
+          },
+          "screens": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 16,
+            "description": "Number of screens (required for type=bigscreen)"
+          },
+          "resolution": {
+            "type": "string",
+            "pattern": "^\\d+x\\d+$",
+            "default": "1920x1080"
+          },
+          "latency_class": {
+            "type": "string",
+            "enum": ["interactive", "broadcast"],
+            "default": "interactive"
+          },
+          "tags": {
+            "type": "object",
+            "additionalProperties": { "type": "string" },
+            "description": "Arbitrary key-value tags for ABAC policy matching"
+          }
+        },
+        "if": { "properties": { "type": { "const": "tiles" } } },
+        "then": { "required": ["grid"] }
+      }
+    },
+
+    "sources": {
+      "type": "array",
+      "minItems": 0,
+      "items": {
+        "type": "object",
+        "required": ["id", "type"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,62}$",
+            "description": "Unique source identifier"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["webrtc", "rtsp", "srt", "rtp"],
+            "description": "Ingest transport protocol"
+          },
+          "endpoint": {
+            "type": "string",
+            "description": "Ingest URL (required for rtsp/srt/rtp; optional for webrtc)"
+          },
+          "codec": {
+            "type": "string",
+            "enum": ["h264", "hevc", "av1", "vp8", "vp9"],
+            "description": "Source codec (autodetected if omitted)"
+          },
+          "resolution": {
+            "type": "string",
+            "pattern": "^\\d+x\\d+$"
+          },
+          "bitrate_kbps": {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 100000
+          },
+          "tags": {
+            "type": "object",
+            "additionalProperties": { "type": "string" },
+            "description": "Arbitrary key-value tags for ABAC policy matching"
+          }
+        }
+      }
+    },
+
+    "policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "taxonomy": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "array",
+            "items": { "type": "string" }
+          },
+          "description": "Classification taxonomies (e.g. classifications: [U, C, S])"
+        },
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "effect"],
+            "properties": {
+              "id": { "type": "string" },
+              "effect": { "type": "string", "enum": ["allow", "deny"] },
+              "description": { "type": "string" },
+              "when": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Condition predicates evaluated against wall/source/operator tags"
+              }
+            }
+          }
+        },
+        "allow_list": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "operator_id": { "type": "string" },
+              "wall_id": { "type": "string" },
+              "source_id": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -26,11 +26,13 @@ janus:
     slowlinkThreshold: 4
 
 videoroom:
-  defaultRoomId: 1234
+  # Room IDs are dynamically created from platform config (one per tile-wall).
+  # The defaultRoomId is only used as a fallback when vw-config is unavailable.
+  defaultRoomId: 0
   private: true
-  maxPublishers: 64
+  maxPublishers: 64             # Derived from platform.max_concurrent_streams
   bitrate: 8000000
-  videocodec: "h264"
+  videocodec: "h264"            # Derived from platform.codec_policy.tiles
 
 networkPolicy:
   enabled: true

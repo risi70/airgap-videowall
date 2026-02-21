@@ -1,122 +1,122 @@
-# Architecture
+# Architecture Overview
 
-## Component view
+## Dynamic Configuration Model
 
-```mermaid
-flowchart LR
-  subgraph SZ["Source Zone"]
-    SA["Source Agent (VDI / HDMI encoder)\nTLS+mTLS\nGStreamer"]
-    ENC["HDMI-to-IP Encoder\nRTSP/SRT"]
-  end
+All wall counts, source definitions, codec policies, and ABAC rules are
+**declaratively configured via YAML** and served by the `vw-config` Configuration
+Authority. No code changes are needed to add/remove walls or sources.
 
-  subgraph MC["Media Core Zone (Kubernetes)"]
-    subgraph VWCTL["vw-control namespace"]
-      MGMT["vw-mgmt-api\nFastAPI\nOIDC JWT validation\nPolicy PEP"]
-      POL["vw-policy\nABAC/RBAC engine"]
-      AUD["vw-audit\nappend-only hash chain"]
-      HLTH["vw-health\nhealth aggregation"]
-      KC["Keycloak\nOIDC"]
-      VA["Vault PKI\nCA + issuance"]
-      PG["PostgreSQL 15"]
-    end
-
-    subgraph VWM["vw-media namespace"]
-      SFU["Janus SFU\nWebRTC"]
-      GW["GStreamer Gateway\nRTSP/RTP/SRT ingest"]
-      COMP["Compositor\nMosaic render"]
-    end
-
-    subgraph OBS["vw-obs namespace"]
-      PROM["Prometheus"]
-      GRAF["Grafana"]
-      LOKI["Loki"]
-      PT["Promtail"]
-    end
-  end
-
-  subgraph DZ["Display Zone"]
-    WC["Wall Controller\nheartbeat + layout"]
-    TP["Tile Player\nmpv/kiosk"]
-    BS["Big Screen Player\n4K"]
-  end
-
-  SA -->|mTLS + REST| MGMT
-  ENC -->|RTSP/SRT| GW
-  SA -->|RTP/SRT| GW
-  GW -->|WebRTC/RTP| SFU
-  SFU -->|Media| TP
-  SFU -->|Media| BS
-  MGMT <--> POL
-  MGMT --> AUD
-  MGMT <--> PG
-  MGMT -->|OIDC| KC
-  MGMT -->|cert issue| VA
-
-  MGMT -->|/metrics| PROM
-  SFU -->|/metrics| PROM
-  GW -->|/metrics| PROM
-  COMP -->|/metrics| PROM
-  PT -->|logs| LOKI
-  GRAF -->|queries| PROM
-  GRAF -->|logs| LOKI
+```
+┌──────────────────────────────────────────────────────────────────────┐
+│                    platform-config.yaml                              │
+│  platform: { max_streams: 64, codec: {tiles: h264, mosaics: hevc}} │
+│  walls: [{id: wall-alpha, grid: 6×4}, {id: wall-charlie, screens: 2}]│
+│  sources: [{id: vdi-01, type: webrtc}, {id: hdmi-01, type: srt}]   │
+│  policy: { rules: [...] }                                           │
+└──────────────────────┬───────────────────────────────────────────────┘
+                       │ ConfigMap / Signed Bundle
+                       ▼
+              ┌─────────────────┐
+              │   vw-config     │ ← Configuration Authority (SBB-CONFIG-AUTHORITY)
+              │  Validate/Watch │ ← JSONSchema + file watcher
+              │  Serve/Audit    │ ← REST API + audit chain logging
+              └────────┬────────┘
+         ┌─────────────┼─────────────┬──────────────┐
+         ▼             ▼             ▼              ▼
+    ┌─────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────┐
+    │mgmt-api │  │ policy   │  │SFU ctrl  │  │ compositor   │
+    │walls/src│  │ABAC rules│  │auto-rooms│  │auto-mosaics  │
+    └─────────┘  └──────────┘  └──────────┘  └──────────────┘
 ```
 
-## Sequences
+## Zone Architecture
 
-### a) Operator assigns source to wall
-```mermaid
-sequenceDiagram
-  actor Op as Operator
-  participant UI as Mgmt UI
-  participant KC as Keycloak
-  participant MG as vw-mgmt-api
-  participant PL as vw-policy
-  participant AU as vw-audit
-  Op->>UI: Select wall + source
-  UI->>KC: OIDC auth
-  KC-->>UI: JWT (roles + clearance_tags)
-  UI->>MG: POST /walls/{id}/assign (JWT)
-  MG->>PL: Evaluate ABAC/RBAC (wall, source, tags)
-  PL-->>MG: allow/deny
-  alt allow
-    MG->>AU: Append audit record + hash
-    MG-->>UI: 200 OK (assignment)
-  else deny
-    MG-->>UI: 403 Forbidden
-  end
+```
+┌─────────────────────────────────────────────────────────────────┐
+│ Source Zone (VLAN 10)                                           │
+│  VDI WebRTC Encoders ─┐    HDMI SRT/RTSP Encoders ─┐         │
+│                        │                             │         │
+└────────────────────────┼─────────────────────────────┼─────────┘
+                         │                             │
+┌────────────────────────┼─────────────────────────────┼─────────┐
+│ Media Core Zone (K8s)  │                             │         │
+│                        ▼                             ▼         │
+│  vw-control ns: mgmt-api ↔ policy ↔ audit ↔ vw-config        │
+│  vw-media ns:   Gateway → SFU (Janus) → Compositor           │
+│  vw-obs ns:     Prometheus / Grafana / Loki                   │
+│                        │                             │         │
+└────────────────────────┼─────────────────────────────┼─────────┘
+                         │                             │
+┌────────────────────────┼─────────────────────────────┼─────────┐
+│ Display Zone (VLAN 30) │                             │         │
+│  Tile Players (Pi) ◄───┘  Big-Screen Players (Pi) ◄─┘         │
+│  Wall Controller (per-wall agent, fetches config from vw-config)│
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-### b) Tile player subscribes
+## Component Responsibilities
+
+| Component | Role | Config Source |
+|-----------|------|--------------|
+| **vw-config** | Configuration Authority — loads, validates, watches, serves YAML config | ConfigMap / bundle |
+| **mgmt-api** | API gateway — orchestration, token issuance, CRUD. Reads walls/sources from vw-config | vw-config API |
+| **policy** | ABAC evaluation — rules + tags from config | vw-config API |
+| **audit** | Append-only hash-chained audit log | Direct (logs config changes) |
+| **Janus SFU** | WebRTC media forwarding — rooms auto-created per tile-wall | vw-config (via mgmt-api) |
+| **Gateway** | Ingest (SRT/RTSP/RTP→WebRTC) — workers per config-defined source | vw-config API |
+| **Compositor** | GPU mosaic rendering — pipelines per bigscreen-wall | vw-config API |
+| **Wall Controller** | Per-wall endpoint agent (Pi) — fetches tile config, manages player | vw-config API |
+| **Tile Player** | mpv kiosk on Pi — decodes single tile stream (DRM/KMS, hw decode) | Wall Controller |
+
+## Hot Reload Strategy
+
+| Component | Reload Method | Restart Required? |
+|-----------|--------------|-------------------|
+| vw-config | File watcher (5s poll on ConfigMap mount) | No |
+| mgmt-api | Polls vw-config API on request | No |
+| policy | Polls vw-config API on evaluation | No |
+| SFU controller | Reconciliation loop creates/removes rooms | No |
+| compositor | Pipeline manager adds/removes mosaics | Graceful restart for GPU pipeline changes |
+| gateway | Worker manager spawns/kills per source | No |
+| wall controller | Polls vw-config for assignment | No |
+| Pi player | Restart by wall controller on reassignment | Service restart (fast) |
+
+## Mermaid: Control Plane Flow
+
 ```mermaid
 sequenceDiagram
-  participant TP as Tile Player
-  participant WC as Wall Controller
-  participant MG as vw-mgmt-api
-  participant PL as vw-policy
-  TP->>WC: Request playback details (local)
-  WC->>MG: Request subscribe token (mTLS)
-  MG->>PL: Evaluate subscription authorization
-  PL-->>MG: allow + constraints
-  MG-->>WC: Signed subscribe token + URL
-  WC-->>TP: URL + token
-  TP->>MG: (optional) validate token freshness
-  TP->>SFU: Subscribe/play (token)
+    participant Op as Operator
+    participant KC as Keycloak
+    participant MA as mgmt-api
+    participant VC as vw-config
+    participant POL as policy
+    participant AUD as audit
+    participant SFU as Janus SFU
+
+    Op->>KC: Authenticate (OIDC)
+    KC-->>Op: JWT (roles + clearance_tags)
+    Op->>MA: POST /walls/{wall-id}/layouts (JWT)
+    MA->>VC: GET /api/v1/walls/{wall-id}
+    VC-->>MA: Wall config + tags
+    MA->>POL: POST /evaluate (wall tags + operator tags)
+    POL->>VC: GET /api/v1/policy
+    VC-->>POL: Policy rules
+    POL-->>MA: allow/deny
+    MA->>AUD: POST /events (layout.activate)
+    MA->>SFU: Create/update room (derived from wall grid)
+    MA-->>Op: 200 OK
 ```
 
-### c) Compositor renders mosaic
-```mermaid
-sequenceDiagram
-  participant COMP as Compositor
-  participant MG as vw-mgmt-api
-  participant SFU as SFU
-  MG-->>COMP: Desired mosaic layout + source streams
-  COMP->>SFU: Pull/subscribe inputs
-  SFU-->>COMP: Media frames
-  COMP-->>SFU: Composite output stream
-  SFU-->>Players: Per-tile/big-screen streams
+## Configuration Delivery
+
+### Online (K8s cluster)
+```
+Helm values → ConfigMap → vw-config file watcher → API consumers
 ```
 
-## Data flow notes
-- Control plane uses **mTLS** between services and agents.
-- Operator plane uses **OIDC** (Keycloak) to obtain JWT; mgmt-api validates and enforces RBAC/ABAC.
-- Media plane uses WebRTC/SRTP (interactive) or RTP/SRT (lower complexity) depending on endpoint class.
+### Offline (air-gapped bundle)
+```
+bundlectl export → USB → bundlectl import → ConfigMap update → vw-config → API
+```
+
+All config bundles are signed (Ed25519) and checksum-verified before apply.

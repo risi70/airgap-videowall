@@ -1,0 +1,12 @@
+{{- if eq .Values.configSource "inline" }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vw-platform-config
+  labels:
+    app.kubernetes.io/name: vw-config
+    app.kubernetes.io/part-of: videowall
+data:
+  platform-config.yaml: |
+{{ .Values.platformConfig | indent 4 }}
+{{- end }}

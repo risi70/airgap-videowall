@@ -1,60 +1,75 @@
-# Sizing (baseline assumptions)
+# Sizing
 
-> **v2 Reference Sizing (normative — REQ-SIZE-001, REQ-SIZE-002)**
+> **Dynamic sizing — all values derived from `config/examples/platform-config.yaml`**
+>
+> Wall counts, tile counts, source counts, and concurrency limits are
+> **declaratively configured via YAML**. The sizing model scales dynamically
+> based on the current configuration. There are no hardcoded assumptions.
 
-Assumptions:
-- **W=4 walls**: 2× 24-tile tilewall (6×4 grid, 1080p per tile) + 2× dual-4K bigscreen
-- **Sources=28**: 20 VDI + 8 HDMI encoders
-- **N=64 max concurrent streams**: 48 tiles + 16 compositor inputs
-- **Latency classes**: WebRTC interactive <500ms, SRT/compositor 2–6s
-- **Codec policy**: tiles MUST use H.264 High Profile; mosaics SHOULD use HEVC Main
-- **Bitrates**: 1080p H.264 @ 6 Mbps, 4K HEVC @ 15 Mbps
+## Configuration-Driven Sizing
 
-## Sizing table (rule-of-thumb)
+| Parameter | Configured In | Example Value | Impact |
+|-----------|--------------|---------------|--------|
+| Wall count (W) | `walls[]` array | 4 | SFU rooms, compositor pipelines |
+| Tiles per wall | `walls[].grid.rows × cols` | 24 (6×4) | SFU egress, endpoint count |
+| Big-screens | `walls[].type: bigscreen` | 2 × dual-4K | Compositor GPU load |
+| Source count (N) | `sources[]` array | 28 (20 VDI + 8 HDMI) | Gateway ingest workers |
+| Max concurrent | `platform.max_concurrent_streams` | 64 | Cluster-wide stream cap |
+| Codec policy | `platform.codec_policy` | tiles: h264, mosaics: hevc | Decode/encode CPU/GPU |
 
-| Component | CPU | RAM | Network | Storage | Notes |
-|---|---:|---:|---:|---:|---|
-| vw-mgmt-api (HA x2) | 2 vCPU each | 2–4 GB | <200 Mbps | negligible | AuthZ, orchestration, token issuance |
-| vw-policy (HA x2) | 1–2 vCPU each | 1–2 GB | <100 Mbps | negligible | ABAC evaluation, cache hot paths |
-| vw-audit (HA x2) | 1–2 vCPU each | 2–4 GB | <100 Mbps | 50–200 GB | audit chain + retention/export |
-| PostgreSQL 15 (HA) | 4–8 vCPU | 16–32 GB | <200 Mbps | 200–500 GB | depends on audit retention + config history |
-| Janus SFU | 8–24 vCPU | 8–16 GB | 2–10 Gbps | negligible | dominated by number of forwarded streams |
-| Gateway (GStreamer) | 8–32 vCPU | 8–16 GB | 2–10 Gbps | negligible | ingest fan-in + transcoding (avoid if possible) |
-| Compositor | 16–64 vCPU or GPU | 16–64 GB | 2–10 Gbps | negligible | mosaic rendering cost driver |
-| Prometheus | 2–4 vCPU | 4–8 GB | <200 Mbps | 50–200 GB | retention 7d baseline |
-| Grafana | 1 vCPU | 1–2 GB | low | low | operator access only |
-| Loki | 2–8 vCPU | 4–16 GB | <200 Mbps | 100–500 GB | depends on log volume/retention |
-| Promtail | ~0.1 vCPU/node | ~100 MB/node | low | low | daemonset |
+### Derived metrics (computed by vw-config)
 
-## Dominant cost drivers
-1. **SFU egress**: total forwarded bitrate = sum(stream bitrate × subscribers).
-2. **Compositor**: pixel throughput (tiles × resolution × fps) dominates.
-3. **Gateway transcoding**: avoid if possible; prefer pass-through.
+These are recalculated automatically when the YAML config changes:
 
-## Raspberry Pi 4/5 feasibility (decoder)
-Constraints:
-- Pi 4: limited 4K decode depending on profile; RAM 2–8 GB.
-- Pi 5: improved CPU/GPU; still constrained IO and thermal headroom.
+- **total_tiles** = Σ(rows × cols) for all tile-walls
+- **total_screens** = Σ(screens) for all bigscreen-walls
+- **sfu_rooms_needed** = count of tile-walls
+- **mosaic_pipelines_needed** = count of bigscreen-walls
+- **estimated_bandwidth_gbps** = (tiles × 6Mbps + screens × 15Mbps + source ingress) / 1000
+- **concurrency_headroom** = max_concurrent_streams − total_endpoints
+
+Use `POST /api/v1/config/dry-run` to simulate before applying.
+
+## Component Sizing Table
+
+> Scale CPU/RAM proportionally to the configured wall + source counts.
+
+| Component | Base (W≤2) | Reference (W=4, N=64) | Scale Factor |
+|-----------|-----------|----------------------|-------------|
+| vw-config | 0.1 vCPU, 128 MB | 0.1 vCPU, 128 MB | Constant |
+| vw-mgmt-api (×2) | 1 vCPU, 2 GB each | 2 vCPU, 4 GB each | +1 vCPU per 2 walls |
+| vw-policy (×2) | 1 vCPU, 1 GB each | 2 vCPU, 2 GB each | +0.5 vCPU per 10 sources |
+| vw-audit (×2) | 1 vCPU, 2 GB each | 2 vCPU, 4 GB each | Storage grows with retention |
+| PostgreSQL (HA) | 4 vCPU, 16 GB | 8 vCPU, 32 GB | +50 GB storage per wall-year |
+| Janus SFU (×2) | 4 vCPU, 4 GB each | 12 vCPU, 8 GB each | Linear with tile count |
+| Gateway | 4 vCPU, 4 GB | 16 vCPU, 8 GB | Linear with source count |
+| Compositor (GPU) | 1 GPU, 8 GB | 1 GPU, 32 GB | +1 GPU per 2 bigscreen walls |
+| Prometheus | 2 vCPU, 4 GB | 4 vCPU, 8 GB | +1 GB per 50 endpoints |
+
+## Dominant Cost Drivers
+
+1. **SFU egress**: total_tiles × stream_bitrate × subscriber_fanout
+2. **Compositor GPU**: pixel throughput (tiles × resolution × fps) per bigscreen wall
+3. **Gateway transcoding**: avoid if possible; prefer codec-compatible pass-through
+
+## Bandwidth Estimate Formula
+
+```
+Total ≈ (tile_walls × tiles_per_wall × 6 Mbps)
+      + (bigscreen_walls × screens × 15 Mbps)
+      + Σ(source.bitrate_kbps) / 1000
+```
+
+## Raspberry Pi 4/5 Decoder Sizing
+
+| Stream Type | Pi 4 (v4l2m2m) | Pi 5 (v4l2request) |
+|------------|----------------|-------------------|
+| 1080p30 H.264 6–8 Mbps | ✅ <30% CPU | ✅ <15% CPU |
+| 1080p60 H.264 8–12 Mbps | ⚠ 40–60% CPU | ✅ <25% CPU |
+| 4K30 H.265 15–25 Mbps | ❌ Not reliable | ⚠ 50–70% CPU |
 
 ### Test plan (decoder)
-1. Hardware: Pi 4 (8 GB) and Pi 5 (8 GB), official PSU, heatsink/fan.
-2. OS: minimal Linux with KMS/DRM; mpv with hwdec enabled.
-3. Streams:
-   - 1080p30 H.264 6–8 Mbps
-   - 1080p60 H.264 8–12 Mbps
-   - 4K30 H.265 15–25 Mbps (if supported end-to-end)
-4. Measure:
-   - CPU/GPU utilization, dropped frames
-   - end-to-end latency (glass-to-glass)
-   - stability over 8h
-5. Success criteria:
-   - <1% dropped frames
-   - steady-state temperature below throttling
-   - latency class met for intended use
-
-## TBS HDMI encoder integration checklist
-- Put encoders into **Source Zone VLAN**; deny lateral movement.
-- Firewall allow-list: encoder → gateway only (RTSP/SRT ports).
-- Disable unused services (web UI, telnet/ssh) or restrict to operator VLAN.
-- Unique credentials per encoder; store in Vault.
-- Validate RTSP/SRT URLs and rotate credentials.
+1. Hardware: Pi 4 (8 GB) + Pi 5 (8 GB), official PSU, heatsink/fan
+2. OS: Alpine Linux aarch64, KMS/DRM, mpv with hwdec
+3. Measure: CPU/GPU util, dropped frames, e2e latency, 8h stability
+4. Success: <1% drops, below thermal throttle, latency class met
