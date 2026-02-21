@@ -1,0 +1,46 @@
+# Example wall manifest for vw-build-wall-images.sh
+# Generates 24 SD card images for a 6×4 tile wall
+
+wall_id: 1
+wall_name: "ops-room"
+grid:
+  rows: 6
+  cols: 4
+
+pi_model: 4             # 4 or 5
+hwdec: v4l2m2m          # v4l2m2m (Pi4), v4l2request (Pi5), auto
+image_size: 2G
+
+# ── Control plane endpoints ──
+mgmt_api_url: "https://vw-mgmt-api.videowall.svc:8000"
+sfu_url: "https://janus.videowall.svc:8088"
+room_id: 1234
+
+# ── Network ──
+network:
+  vlan_id: 30            # Display Zone VLAN (leave empty for no VLAN)
+  gateway: "10.30.1.1"
+  dns: "10.30.1.1"
+  ntp: "10.30.1.1"
+  subnet: "10.30.1"      # Tiles get .10, .11, .12, ... (.base_offset + index)
+  base_offset: 10
+
+# ── mTLS certificates (from Vault PKI) ──
+certs:
+  ca_cert: "/etc/videowall/certs/ca.crt"
+  client_cert: "/etc/videowall/certs/client.crt"
+  client_key: "/etc/videowall/certs/client.key"
+
+# ── SSH access (key-only, for remote maintenance) ──
+ssh_pubkey: "~/.ssh/id_ed25519.pub"
+
+# ── Safe-slate image (shown when no stream is available) ──
+safe_slate: ""           # Path to PNG, or leave empty for text-only
+
+# ── Per-tile overrides ──
+# Override specific tiles with different settings (e.g. big-screen mode)
+overrides: {}
+# Example:
+#   "tile-5-3":
+#     player_mode: big
+#     stream_url: "srt://compositor.videowall.svc:9000"

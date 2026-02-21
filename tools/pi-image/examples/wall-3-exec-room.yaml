@@ -1,0 +1,40 @@
+# Example: Dual 4K big-screen wall (compositor output)
+# Generates 2 SD card images — one per screen
+
+wall_id: 3
+wall_name: "exec-room"
+grid:
+  rows: 1
+  cols: 2
+
+pi_model: 5             # Pi 5 recommended for 4K HEVC
+hwdec: v4l2request      # Pi 5 hardware decode
+image_size: 2G
+
+mgmt_api_url: "https://vw-mgmt-api.videowall.svc:8000"
+sfu_url: "https://janus.videowall.svc:8088"
+room_id: 5678
+
+network:
+  vlan_id: 30
+  gateway: "10.30.2.1"
+  dns: "10.30.2.1"
+  ntp: "10.30.2.1"
+  subnet: "10.30.2"
+  base_offset: 10
+
+certs:
+  ca_cert: "/etc/videowall/certs/ca.crt"
+  client_cert: "/etc/videowall/certs/client.crt"
+  client_key: "/etc/videowall/certs/client.key"
+
+ssh_pubkey: "~/.ssh/id_ed25519.pub"
+
+# Both screens play compositor SRT output directly
+overrides:
+  "tile-0-0":
+    player_mode: big
+    stream_url: "srt://compositor.videowall.svc:9000?streamid=wall3-left"
+  "tile-0-1":
+    player_mode: big
+    stream_url: "srt://compositor.videowall.svc:9001?streamid=wall3-right"
