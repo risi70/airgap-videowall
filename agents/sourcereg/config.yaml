@@ -1,13 +1,16 @@
-source_id: ""   # empty -> will register and persist assigned id to state file
-source_name: "VDI-01"
-source_type: "vdi"           # vdi|hdmi-encoder|other
-protocol: "srt"              # srt|rtp|webrtc|rtsp
-endpoint_url: "srt://encoder.local:9000?mode=caller&latency=50"
-codec: "h264"
-tags: ["training", "vdi"]
-mgmt_api_url: "https://vw-mgmt-api.vw-control.svc.cluster.local"
-health_url: "https://vw-health.vw-media.svc.cluster.local"
-ca_cert: "/etc/videowall/pki/ca.crt"
-client_cert: "/etc/videowall/pki/sourcereg.crt"
-client_key: "/etc/videowall/pki/sourcereg.key"
-check_interval: 15
+# vw-sourcereg configuration
+# All URLs can be overridden via environment variables:
+#   VW_MGMT_API_URL, VW_HEALTH_URL
+
+poll_interval_seconds: 30
+heartbeat_interval_seconds: 10
+
+# Default service URLs (override for custom namespace deployments)
+mgmt_api_url: "${VW_MGMT_API_URL:-https://vw-mgmt-api:8000}"
+health_url: "${VW_HEALTH_URL:-https://vw-health:8003}"
+
+# mTLS cert paths (populated by Vault Agent or Ansible)
+tls:
+  cert: "/vault/secrets/tls.crt"
+  key: "/vault/secrets/tls.key"
+  ca: "/vault/secrets/ca.crt"

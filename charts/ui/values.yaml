@@ -34,3 +34,34 @@ postgres:
   port: 5432
 dns:
   port: 53
+
+# Vault Agent sidecar injection (set enabled: false to use existing Vault or skip injection)
+vault:
+  enabled: true
+  role: ""           # Override Vault K8s auth role name (default: chart name)
+  pkiPath: "pki_int/issue/server-cert"
+  agentImage: ""     # Override vault-agent image (for air-gap registries)
+
+# External service discovery (override when deploying into custom namespaces)
+externalServices:
+  policyUrl: ""      # e.g. http://vw-policy.mynamespace.svc.cluster.local:8001
+  auditUrl: ""       # e.g. http://vw-audit.mynamespace.svc.cluster.local:8002
+  healthUrl: ""      # e.g. http://vw-health.mynamespace.svc.cluster.local:8003
+  mgmtApiUrl: ""     # e.g. http://vw-mgmt-api.mynamespace.svc.cluster.local:8000
+
+# External PostgreSQL (provide your own)
+postgresql:
+  host: "postgres"
+  port: 5432
+  database: "vw"
+  username: "vw"
+  existingSecret: "" # K8s Secret name containing key 'password'
+  dsn: ""            # Full override: postgresql://user:pass@host:port/db
+
+# External Keycloak (OIDC)
+keycloak:
+  issuer: ""
+  audience: ""
+  clientId: "vw"
+  publicKeyPem: ""   # RS256 public key for offline JWT verification
+  jwksPath: ""       # Path to offline JWKS JSON file

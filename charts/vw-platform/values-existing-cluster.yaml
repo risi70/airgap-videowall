@@ -1,0 +1,144 @@
+# values-existing-cluster.yaml
+#
+# Example Helm values for deploying airgap-videowall into an existing
+# Kubernetes cluster with pre-existing Vault, Keycloak, and PostgreSQL.
+#
+# Usage:
+#   helm upgrade --install videowall charts/vw-platform \
+#     -f charts/vw-platform/values-existing-cluster.yaml \
+#     --namespace videowall --create-namespace
+#
+# For per-service charts (deployed separately):
+#   helm upgrade --install vw-mgmt-api charts/mgmt-api \
+#     -f charts/mgmt-api/values.yaml \
+#     --set env.VW_DB_DSN="postgresql://vw:secret@pg.infra.svc:5432/videowall" \
+#     --set env.VW_OIDC_ISSUER="https://keycloak.infra.svc/realms/videowall" \
+#     --namespace videowall
+
+# ──────────────────────────────────────────────────────────────
+# Global
+# ──────────────────────────────────────────────────────────────
+global:
+  registry: "registry.example.com"   # Your container registry
+  imagePullPolicy: IfNotPresent
+
+# ──────────────────────────────────────────────────────────────
+# Namespaces — map to YOUR existing namespace layout
+# Set defaultDenyEnabled: false if you already have default-deny
+# NetworkPolicies in place.
+# ──────────────────────────────────────────────────────────────
+namespaces:
+  control:
+    name: "videowall"           # Single namespace is fine
+    defaultDenyEnabled: false   # You manage your own NetworkPolicies
+  media:
+    name: "videowall"
+    defaultDenyEnabled: false
+  obs:
+    name: "monitoring"          # Your existing monitoring namespace
+    defaultDenyEnabled: false
+
+# ──────────────────────────────────────────────────────────────
+# External PostgreSQL
+# Provide connection details for your existing PostgreSQL.
+# The application needs a database with the schema from
+# services/mgmt-api/app/database.py (auto-created on first run).
+# ──────────────────────────────────────────────────────────────
+postgresql:
+  host: "pg-primary.infra.svc.cluster.local"
+  port: 5432
+  database: "videowall"
+  username: "vw_app"
+  existingSecret: "videowall-db-credentials"   # Secret with key 'password'
+  # Or provide full DSN:
+  # dsn: "postgresql://vw_app:secret@pg-primary.infra.svc:5432/videowall"
+
+# ──────────────────────────────────────────────────────────────
+# External Keycloak (OIDC)
+# Point to your existing Keycloak instance.
+# You need to import the videowall realm (security/keycloak/bootstrap.sh)
+# or manually create:
+#   - Realm: videowall (or add client to existing realm)
+#   - Client: vw (confidential, RS256)
+#   - Roles: admin, operator, viewer
+#   - Protocol mapper: clearance_tags → JWT claim
+# ──────────────────────────────────────────────────────────────
+keycloak:
+  issuer: "https://keycloak.example.com/realms/videowall"
+  audience: "vw"
+  clientId: "vw"
+  publicKeyPem: ""      # Paste RS256 public key here, or use jwksPath
+  jwksPath: ""           # Path to JWKS JSON file mounted in pod
+
+# ──────────────────────────────────────────────────────────────
+# External Vault
+# Point to your existing HashiCorp Vault.
+# Requirements:
+#   1. PKI secrets engine enabled (run security/vault/setup-pki.sh)
+#   2. Kubernetes auth method configured for this cluster
+#   3. Vault Agent Injector deployed (helm install vault hashicorp/vault
+#      --set "injector.enabled=true" --set "server.enabled=false")
+#   4. Roles created for each service (sfu, gateway, compositor,
+#      mgmt-api, policy, audit, health, ui)
+# ──────────────────────────────────────────────────────────────
+vault:
+  deploy: false                 # Do NOT deploy vw-vault chart
+  address: "https://vault.infra.svc.cluster.local:8200"
+  pkiPath: "pki_int/issue/videowall-server"   # Your PKI role path
+  authPath: "auth/kubernetes"
+
+# ──────────────────────────────────────────────────────────────
+# Sub-chart overrides
+# ──────────────────────────────────────────────────────────────
+
+vw-vault:
+  enabled: false                # Skip — using external Vault
+
+vw-sfu-janus:
+  replicaCount: 2
+  vault:
+    enabled: true
+    role: "videowall-sfu"       # Your Vault K8s auth role
+    pkiPath: "pki_int/issue/videowall-server"
+  controlPlaneNamespace: "videowall"
+  image:
+    repository: "registry.example.com/janus-gateway/janus-gateway"
+    tag: "1.2.4"
+
+vw-gw:
+  vault:
+    enabled: true
+    role: "videowall-gateway"
+    pkiPath: "pki_int/issue/videowall-server"
+  controlPlaneNamespace: "videowall"
+  image:
+    repository: "registry.example.com/vw-gw"
+    tag: "0.1.0"
+
+vw-compositor:
+  vault:
+    enabled: true
+    role: "videowall-compositor"
+    pkiPath: "pki_int/issue/videowall-server"
+  controlPlaneNamespace: "videowall"
+  env:
+    VW_POLICY_SERVICE_URL: "http://vw-policy.videowall.svc.cluster.local:8001"
+  image:
+    repository: "registry.example.com/vw-compositor"
+    tag: "0.1.0"
+
+# ──────────────────────────────────────────────────────────────
+# Per-service env overrides
+# Pass these when installing per-service charts separately,
+# or include them in umbrella values.
+# ──────────────────────────────────────────────────────────────
+# Example for mgmt-api:
+#   env:
+#     VW_DB_DSN: "postgresql://vw_app:secret@pg-primary.infra.svc:5432/videowall"
+#     VW_POLICY_URL: "http://vw-policy.videowall.svc:8001"
+#     VW_AUDIT_URL: "http://vw-audit.videowall.svc:8002"
+#     VW_HEALTH_URL: "http://vw-health.videowall.svc:8003"
+#     VW_OIDC_ISSUER: "https://keycloak.example.com/realms/videowall"
+#     VW_OIDC_CLIENT_ID: "vw"
+#     VW_OIDC_PUBLIC_KEY_PEM: "<paste RS256 public key>"
+#     VW_STREAM_TOKEN_SECRET: "<random 32+ char secret>"

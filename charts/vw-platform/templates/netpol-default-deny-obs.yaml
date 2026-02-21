@@ -1,8 +1,9 @@
+{{- if .Values.namespaces.obs.defaultDenyEnabled | default true }}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: default-deny-all
-  namespace: vw-observability
+  namespace: {{ .Values.namespaces.obs.name | default "vw-observability" }}
   labels:
     app.kubernetes.io/part-of: videowall
 spec:
@@ -10,3 +11,4 @@ spec:
   policyTypes:
     - Ingress
     - Egress
+{{- end }}

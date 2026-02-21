@@ -38,7 +38,16 @@ networkPolicy:
   fromMgmtApiSelector:
     namespaceSelector:
       matchLabels:
-        kubernetes.io/metadata.name: vw-control
+        kubernetes.io/metadata.name: vw-control  # Override via controlPlaneNamespace
     podSelector:
       matchLabels:
         app.kubernetes.io/name: vw-mgmt-api
+
+# Vault Agent sidecar injection
+vault:
+  enabled: true
+  role: ""            # Override Vault K8s auth role (default: "sfu")
+  pkiPath: "pki_int/issue/server-cert"
+
+# Cross-namespace references — override when control plane is in a different namespace
+controlPlaneNamespace: "vw-control"

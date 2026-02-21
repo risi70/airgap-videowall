@@ -147,12 +147,14 @@ cd security/keycloak && bash bootstrap.sh \
 
 ### 4. Deploy to Kubernetes
 
+**Option A — Fresh air-gapped cluster:**
+
 ```bash
-# Online: pull and save images
+# Pull and save images
 cd scripts && bash mirror-images.sh pull_all
 bash mirror-images.sh save_all images.tar.zst
 
-# Air-gapped: load and retag
+# Load and retag on air-gapped network
 bash mirror-images.sh load_all images.tar.zst
 bash mirror-images.sh retag_and_push
 
@@ -161,6 +163,20 @@ helm upgrade --install videowall charts/vw-platform \
   -f charts/vw-platform/values-airgap.yaml \
   --namespace vw-control --create-namespace
 ```
+
+**Option B — Existing cluster with Vault + Keycloak + PostgreSQL:**
+
+```bash
+# Copy and customize the example values
+cp charts/vw-platform/values-existing-cluster.yaml my-values.yaml
+# Edit my-values.yaml: set your Vault address, Keycloak issuer, DB DSN, etc.
+
+helm upgrade --install videowall charts/vw-platform \
+  -f my-values.yaml \
+  --namespace videowall --create-namespace
+```
+
+See **[`docs/deploy-existing-cluster.md`](docs/deploy-existing-cluster.md)** for step-by-step instructions including Vault role setup, Keycloak realm import, and per-service deployment.
 
 ### 5. Run tests
 
@@ -260,6 +276,7 @@ Full verification details: [`docs/architecture-completeness-report.md`](docs/arc
 | Document | Description |
 |----------|-------------|
 | [`docs/architecture-v2.md`](docs/architecture-v2.md) | Full reference architecture specification (v2.0) |
+| [`docs/deploy-existing-cluster.md`](docs/deploy-existing-cluster.md) | Deploy into existing K8s with Vault + Keycloak + PostgreSQL |
 | [`docs/architecture.md`](docs/architecture.md) | Architecture overview with Mermaid diagrams |
 | [`docs/security.md`](docs/security.md) | Zone model, mTLS, OIDC, RBAC/ABAC, PEP, hardening |
 | [`docs/sizing.md`](docs/sizing.md) | Reference sizing, Pi decoder test plan, encoder checklist |

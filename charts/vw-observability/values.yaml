@@ -30,22 +30,22 @@ scrapeTargets:
     metrics_path: "/metrics"
     scheme: "https"
     static_configs:
-      - targets: ["vw-mgmt-api.vw-control.svc:8443"]
+      - targets: ["{{ .Values.scrapeTargets.mgmtApi | default "vw-mgmt-api.vw-control.svc:8443" }}"]
   - job_name: "vw-media-sfu"
     metrics_path: "/metrics"
     scheme: "https"
     static_configs:
-      - targets: ["vw-sfu.vw-media.svc:8443"]
+      - targets: ["{{ .Values.scrapeTargets.sfu | default "vw-sfu.vw-media.svc:8443" }}"]
   - job_name: "vw-media-gateway"
     metrics_path: "/metrics"
     scheme: "https"
     static_configs:
-      - targets: ["vw-gateway.vw-media.svc:8443"]
+      - targets: ["{{ .Values.scrapeTargets.gateway | default "vw-gateway.vw-media.svc:8443" }}"]
   - job_name: "vw-media-compositor"
     metrics_path: "/metrics"
     scheme: "https"
     static_configs:
-      - targets: ["vw-compositor.vw-media.svc:8443"]
+      - targets: ["{{ .Values.scrapeTargets.compositor | default "vw-compositor.vw-media.svc:8443" }}"]
 
 alerts:
   StreamLost:
@@ -68,3 +68,10 @@ alerts:
     expr: 'vw_audit_chain_ok == 0'
     for: "10s"
     severity: "critical"
+
+# Override scrape targets when services are in custom namespaces
+scrapeTargets:
+  mgmtApi: ""       # e.g. vw-mgmt-api.mynamespace.svc:8000
+  sfu: ""            # e.g. vw-sfu.mynamespace.svc:8088
+  gateway: ""        # e.g. vw-gateway.mynamespace.svc:8004
+  compositor: ""     # e.g. vw-compositor.mynamespace.svc:8005

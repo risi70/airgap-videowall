@@ -15,9 +15,11 @@ spec:
       labels:
         app.kubernetes.io/name: {{ include "vw-compositor.name" . }}
       annotations:
+        {{- if .Values.vault.enabled }}
         vault.hashicorp.com/agent-inject: "true"
-        vault.hashicorp.com/agent-inject-secret-tls.crt: "pki_int/issue/server-cert"
-        vault.hashicorp.com/role: "compositor"
+        vault.hashicorp.com/agent-inject-secret-tls.crt: "{{ .Values.vault.pkiPath }}"
+        vault.hashicorp.com/role: "{{ .Values.vault.role | default "compositor" }}"
+        {{- end }}
     spec:
       nodeSelector:
 {{ toYaml .Values.nodeSelector | indent 8 }}
@@ -38,7 +40,7 @@ spec:
               containerPort: 8005
           env:
             - name: VW_POLICY_SERVICE_URL
-              value: "{{ .Values.env.VW_POLICY_SERVICE_URL }}"
+              value: "{{ .Values.env.VW_POLICY_SERVICE_URL | default (printf "http://vw-policy.%s.svc.cluster.local:8001" (.Values.controlPlaneNamespace | default "vw-control")) }}"
           livenessProbe:
             httpGet: { path: /healthz, port: http }
             initialDelaySeconds: 5

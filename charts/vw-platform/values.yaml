@@ -2,12 +2,62 @@ global:
   registry: ""
   imagePullPolicy: IfNotPresent
 
+# ──────────────────────────────────────────────────────────────
+# Namespace configuration
+# Override these to match your existing cluster layout.
+# Set defaultDenyEnabled: false if your cluster already has
+# default-deny NetworkPolicies applied.
+# ──────────────────────────────────────────────────────────────
+namespaces:
+  control:
+    name: "vw-control"
+    defaultDenyEnabled: true
+  media:
+    name: "vw-media"
+    defaultDenyEnabled: true
+  obs:
+    name: "vw-observability"
+    defaultDenyEnabled: true
+
+# ──────────────────────────────────────────────────────────────
+# External infrastructure — point to existing services
+# ──────────────────────────────────────────────────────────────
+
+# External PostgreSQL (required)
+postgresql:
+  host: "postgres"
+  port: 5432
+  database: "vw"
+  username: "vw"
+  existingSecret: ""      # K8s Secret with key 'password'
+  dsn: ""                 # Full override: postgresql://user:pass@host:port/db
+
+# External Keycloak (required for OIDC)
+keycloak:
+  issuer: ""              # e.g. https://keycloak.example.com/realms/videowall
+  audience: ""
+  clientId: "vw"
+  publicKeyPem: ""        # RS256 public key for offline JWT verification
+  jwksPath: ""            # Path to offline JWKS JSON
+
+# External Vault (set enabled: false to skip deploying vw-vault chart)
+vault:
+  deploy: true            # Set false to use existing Vault (skip vw-vault chart)
+  address: ""             # e.g. https://vault.example.com:8200
+  pkiPath: "pki_int/issue/server-cert"
+  authPath: "auth/kubernetes"
+
+# ──────────────────────────────────────────────────────────────
+# Sub-charts
+# ──────────────────────────────────────────────────────────────
 vw-sfu-janus: {}
 vw-gw: {}
 vw-compositor: {}
-vw-vault: {}
 
-# Stubs disabled by default; replace with real charts
+vw-vault:
+  enabled: true           # Set false when using external Vault
+
+# Stubs disabled by default; use per-service charts instead
 vw-mgmt-api:
   enabled: false
 vw-policy:

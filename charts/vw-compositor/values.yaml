@@ -21,7 +21,7 @@ persistence:
   size: "10Gi"
 
 env:
-  VW_POLICY_SERVICE_URL: "http://vw-policy.vw-control.svc.cluster.local:8002"
+  VW_POLICY_SERVICE_URL: ""  # Auto-resolved; override for cross-namespace: http://vw-policy.<ns>.svc.cluster.local:8002
 
 nodeSelector:
   nvidia.com/gpu.present: "true"
@@ -33,15 +33,24 @@ networkPolicy:
   fromMgmtApiSelector:
     namespaceSelector:
       matchLabels:
-        kubernetes.io/metadata.name: vw-control
+        kubernetes.io/metadata.name: vw-control  # Override via controlPlaneNamespace
     podSelector:
       matchLabels:
         app.kubernetes.io/name: vw-mgmt-api
   toPolicySelector:
     namespaceSelector:
       matchLabels:
-        kubernetes.io/metadata.name: vw-control
+        kubernetes.io/metadata.name: vw-control  # Override via controlPlaneNamespace
     podSelector:
       matchLabels:
         app.kubernetes.io/name: vw-policy
   toSourceCidrs: []
+
+# Vault Agent sidecar injection
+vault:
+  enabled: true
+  role: ""            # Override Vault K8s auth role (default: "compositor")
+  pkiPath: "pki_int/issue/server-cert"
+
+# Cross-namespace references
+controlPlaneNamespace: "vw-control"

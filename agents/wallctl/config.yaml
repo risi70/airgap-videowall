@@ -1,17 +1,20 @@
-wall_id: "wall-1"
-controller_id: "ctrl-1"
-mgmt_api_url: "https://vw-mgmt-api.vw-control.svc.cluster.local"
-health_url: "https://vw-health.vw-media.svc.cluster.local"
-ca_cert: "/etc/videowall/pki/ca.crt"
-client_cert: "/etc/videowall/pki/wallctl.crt"
-client_key: "/etc/videowall/pki/wallctl.key"
-heartbeat_interval: 10
-token_refresh_interval: 240
-layout_poll_interval: 30
-tile_health_interval: 5
-tile_player_binary: "/usr/local/bin/vw_tile_player.py"
-safe_slate_image: "/usr/share/videowall/safe-slate.png"
-failover_rules:
-  max_retries: 3
-  retry_delay: 2
-  fallback_to_slate: true
+# vw-wallctl configuration
+# All URLs can be overridden via environment variables:
+#   VW_MGMT_API_URL, VW_HEALTH_URL
+
+poll_interval_seconds: 5
+heartbeat_interval_seconds: 10
+token_cache_path: "/var/lib/vw-wallctl/token_cache.json"
+
+# Default service URLs (override for custom namespace deployments)
+mgmt_api_url: "${VW_MGMT_API_URL:-https://vw-mgmt-api:8000}"
+health_url: "${VW_HEALTH_URL:-https://vw-health:8003}"
+
+# mTLS cert paths
+tls:
+  cert: "/vault/secrets/tls.crt"
+  key: "/vault/secrets/tls.key"
+  ca: "/vault/secrets/ca.crt"
+
+# Safe-slate image (shown when API is unreachable)
+safe_slate: "/usr/share/vw/safe-slate.png"

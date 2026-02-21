@@ -1,8 +1,9 @@
+{{- if .Values.namespaces.media.defaultDenyEnabled | default true }}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: default-deny-all
-  namespace: vw-media
+  namespace: {{ .Values.namespaces.media.name | default "vw-media" }}
   labels:
     app.kubernetes.io/part-of: videowall
 spec:
@@ -10,3 +11,4 @@ spec:
   policyTypes:
     - Ingress
     - Egress
+{{- end }}
