@@ -1,0 +1,17 @@
+wall_id: "wall-1"
+controller_id: "ctrl-1"
+mgmt_api_url: "https://vw-mgmt-api.vw-control.svc.cluster.local"
+health_url: "https://vw-health.vw-media.svc.cluster.local"
+ca_cert: "/etc/videowall/pki/ca.crt"
+client_cert: "/etc/videowall/pki/wallctl.crt"
+client_key: "/etc/videowall/pki/wallctl.key"
+heartbeat_interval: 10
+token_refresh_interval: 240
+layout_poll_interval: 30
+tile_health_interval: 5
+tile_player_binary: "/usr/local/bin/vw_tile_player.py"
+safe_slate_image: "/usr/share/videowall/safe-slate.png"
+failover_rules:
+  max_retries: 3
+  retry_delay: 2
+  fallback_to_slate: true

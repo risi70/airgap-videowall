@@ -1,0 +1,24 @@
+[Unit]
+Description=Videowall Big Screen Player
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=vw-player
+Group=vw-player
+EnvironmentFile=-/etc/videowall/big-player.env
+ExecStart=/usr/bin/env python3 /opt/videowall/agents/big-player/vw_big_player.py \
+    --wall-id ${VW_WALL_ID} \
+    --mode ${VW_MODE} \
+    --stream-url ${VW_STREAM_URL} \
+    --display ${VW_DISPLAY}
+Restart=always
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

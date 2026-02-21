@@ -1,0 +1,29 @@
+[Unit]
+Description=Videowall VDI Encoder Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=vw-vdi-encoder
+Group=vw-vdi-encoder
+Environment=DISPLAY=:0
+EnvironmentFile=-/etc/videowall/vdi-encoder.env
+ExecStart=/usr/bin/env python3 /opt/videowall/agents/vdi-encoder/vw_vdi_encoder.py \
+    --source-id ${VW_SOURCE_ID} \
+    --display ${DISPLAY} \
+    --resolution ${VW_RESOLUTION} \
+    --fps ${VW_FPS} \
+    --bitrate ${VW_BITRATE} \
+    --output-mode ${VW_OUTPUT_MODE} \
+    --output-url ${VW_OUTPUT_URL} \
+    --health-port ${VW_HEALTH_PORT}
+Restart=always
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

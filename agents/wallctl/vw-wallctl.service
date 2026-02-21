@@ -1,0 +1,24 @@
+[Unit]
+Description=Videowall Wall Controller Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=vw-wallctl
+Group=vw-wallctl
+ExecStart=/usr/bin/env python3 /opt/videowall/agents/wallctl/vw_wallctl.py --config /etc/videowall/wallctl/config.yaml
+Restart=always
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/vw-wallctl
+AmbientCapabilities=
+CapabilityBoundingSet=
+LockPersonality=true
+MemoryDenyWriteExecute=true
+
+[Install]
+WantedBy=multi-user.target

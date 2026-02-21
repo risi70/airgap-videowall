@@ -1,0 +1,26 @@
+[Unit]
+Description=Videowall Tile Player (%i)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=vw-player
+Group=vw-player
+# Expect an EnvironmentFile providing per-tile args (token, sfu_url, room_id, display)
+EnvironmentFile=-/etc/videowall/tiles/%i.env
+ExecStart=/usr/bin/env python3 /opt/videowall/agents/tile-player/vw_tile_player.py \
+    --tile-id %i \
+    --token ${VW_TOKEN} \
+    --sfu-url ${VW_SFU_URL} \
+    --room-id ${VW_ROOM_ID} \
+    --display ${VW_DISPLAY}
+Restart=always
+RestartSec=2
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

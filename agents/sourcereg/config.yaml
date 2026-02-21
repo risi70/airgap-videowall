@@ -1,0 +1,13 @@
+source_id: ""   # empty -> will register and persist assigned id to state file
+source_name: "VDI-01"
+source_type: "vdi"           # vdi|hdmi-encoder|other
+protocol: "srt"              # srt|rtp|webrtc|rtsp
+endpoint_url: "srt://encoder.local:9000?mode=caller&latency=50"
+codec: "h264"
+tags: ["training", "vdi"]
+mgmt_api_url: "https://vw-mgmt-api.vw-control.svc.cluster.local"
+health_url: "https://vw-health.vw-media.svc.cluster.local"
+ca_cert: "/etc/videowall/pki/ca.crt"
+client_cert: "/etc/videowall/pki/sourcereg.crt"
+client_key: "/etc/videowall/pki/sourcereg.key"
+check_interval: 15
