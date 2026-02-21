@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: vw-ui
+  labels:
+    app: vw-ui
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    app: vw-ui
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.port }}

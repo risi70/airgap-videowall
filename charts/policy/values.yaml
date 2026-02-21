@@ -1,0 +1,36 @@
+global:
+  registry: registry.local:5000
+  imageTag: "latest"
+  imagePullPolicy: IfNotPresent
+
+replicaCount: 1
+
+image:
+  repository: vw-policy
+
+service:
+  type: ClusterIP
+  port: 8001
+
+resources: {}
+
+env: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+
+securityContext:
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+
+networkPolicy:
+  enabled: true
+
+# For NetworkPolicy templating
+postgres:
+  host: postgres
+  port: 5432
+dns:
+  port: 53

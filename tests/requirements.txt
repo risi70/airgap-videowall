@@ -1,0 +1,4 @@
+pytest==8.3.4
+PyYAML==6.0.2
+fastapi==0.115.6
+pydantic==2.10.4

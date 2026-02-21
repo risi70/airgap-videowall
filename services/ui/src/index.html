@@ -1,0 +1,481 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>vw-ui</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; margin: 0; }
+    header { display:flex; gap:12px; align-items:center; padding:12px 16px; border-bottom:1px solid #ddd; }
+    nav a { margin-right:10px; text-decoration:none; color:#0366d6; }
+    nav a.active { font-weight:700; }
+    main { padding: 16px; }
+    .grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+    .card { border:1px solid #ddd; border-radius: 10px; padding:12px; }
+    table { width:100%; border-collapse: collapse; }
+    th, td { border-bottom: 1px solid #eee; padding: 6px 8px; text-align:left; font-size: 14px; }
+    input, select, textarea { width: 100%; padding: 6px 8px; box-sizing: border-box; }
+    button { padding: 7px 10px; cursor: pointer; }
+    .row { display:flex; gap:10px; }
+    .row > div { flex:1; }
+    .badge { display:inline-block; padding:2px 6px; border-radius: 999px; font-size: 12px; border:1px solid #ccc; }
+    .ok { border-color:#2e7d32; color:#2e7d32; }
+    .warn { border-color:#ed6c02; color:#ed6c02; }
+    .bad { border-color:#d32f2f; color:#d32f2f; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+  </style>
+</head>
+<body>
+<header>
+  <strong>vw-ui</strong>
+  <nav id="nav"></nav>
+  <div style="margin-left:auto" class="mono" id="who"></div>
+</header>
+<main id="app"></main>
+
+<script>
+const API = '/api/v1';
+
+const routes = [
+  {id:'dashboard', label:'Dashboard'},
+  {id:'walls', label:'Walls'},
+  {id:'sources', label:'Sources'},
+  {id:'layouts', label:'Layouts'},
+  {id:'policy', label:'Policy evaluator'},
+  {id:'audit', label:'Audit log'},
+  {id:'bundle', label:'Bundle export'},
+];
+
+function h(tag, attrs={}, ...children){
+  const el = document.createElement(tag);
+  for (const [k,v] of Object.entries(attrs||{})){
+    if (k === 'class') el.className = v;
+    else if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.substring(2), v);
+    else el.setAttribute(k, v);
+  }
+  for (const c of children){
+    if (c === null || c === undefined) continue;
+    el.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+  }
+  return el;
+}
+
+async function api(path, opts={}){
+  const r = await fetch(`${API}${path}`, Object.assign({
+    headers: Object.assign({'Content-Type':'application/json'}, opts.headers||{})
+  }, opts));
+  if (!r.ok){
+    let msg = `${r.status}`;
+    try { const j = await r.json(); msg = j.detail || JSON.stringify(j); } catch(e){}
+    throw new Error(msg);
+  }
+  if (r.status === 204) return null;
+  return await r.json();
+}
+
+function parseTags(s){
+  return (s||'').split(',').map(x=>x.trim()).filter(Boolean);
+}
+
+function badgeFor(status){
+  const st = (status||'unknown').toLowerCase();
+  let cls = 'badge';
+  if (st === 'ok' || st === 'healthy') cls += ' ok';
+  else if (st === 'unknown' || st === 'degraded') cls += ' warn';
+  else cls += ' bad';
+  return h('span', {class:cls}, st);
+}
+
+function miniGrid(grid){
+  // grid_config expects {rows, cols, tiles:[{tile_id,row,col,source_id?}]}
+  const rows = grid.rows || 1, cols = grid.cols || 1;
+  const box = h('div', {style:`display:grid;grid-template-columns:repeat(${cols},14px);gap:2px;`});
+  for (let r=0;r<rows;r++){
+    for (let c=0;c<cols;c++){
+      box.appendChild(h('div',{style:'width:14px;height:14px;border:1px solid #ccc;border-radius:2px;'}));
+    }
+  }
+  return box;
+}
+
+function setActiveRoute(id){
+  location.hash = '#' + id;
+}
+
+function currentRoute(){
+  return (location.hash || '#dashboard').replace('#','');
+}
+
+function renderNav(){
+  const nav = document.getElementById('nav');
+  nav.innerHTML = '';
+  routes.forEach(rt=>{
+    nav.appendChild(h('a',{href:'#'+rt.id, class: rt.id===currentRoute()?'active':''}, rt.label));
+  });
+}
+
+async function renderWho(){
+  const whoEl = document.getElementById('who');
+  try{
+    const me = await api('/auth/whoami');
+    whoEl.textContent = `${me.preferred_username || me.sub} [${(me.roles||[]).join(',')}]`;
+  }catch(e){
+    whoEl.textContent = 'unauthenticated';
+  }
+}
+
+async function dashboard(){
+  const app = document.getElementById('app');
+  app.innerHTML = '';
+  const [walls, sources, layouts] = await Promise.all([
+    api('/walls'),
+    api('/sources'),
+    api('/layouts'),
+  ]);
+  const activeLayouts = layouts.filter(l=>l.is_active);
+
+  app.appendChild(h('div',{class:'grid'},
+    h('div',{class:'card'}, h('h3',{},'Stats'),
+      h('div',{}, `Walls: ${walls.length}`),
+      h('div',{}, `Sources: ${sources.length}`),
+      h('div',{}, `Active layouts: ${activeLayouts.length}`)
+    ),
+    h('div',{class:'card'}, h('h3',{},'Walls'),
+      tableWalls(walls, {compact:true})
+    ),
+    h('div',{class:'card'}, h('h3',{},'Sources'),
+      tableSources(sources, {compact:true})
+    ),
+  ));
+}
+
+function tableWalls(walls, {compact=false}={}){
+  const t = h('table',{},
+    h('thead',{}, h('tr',{},
+      h('th',{},'ID'), h('th',{},'Name'), h('th',{},'Type'),
+      compact?null:h('th',{},'Tiles'),
+      h('th',{},'Resolution'), h('th',{},'Tags')
+    )),
+    h('tbody',{}, ...walls.map(w=>h('tr',{},
+      h('td',{class:'mono'}, String(w.id)),
+      h('td',{}, w.name),
+      h('td',{}, w.wall_type),
+      compact?null:h('td',{}, String(w.tile_count)),
+      h('td',{}, w.resolution),
+      h('td',{}, (w.tags||[]).join(', '))
+    )))
+  );
+  return t;
+}
+
+function tableSources(sources, {compact=false}={}){
+  const t = h('table',{},
+    h('thead',{}, h('tr',{},
+      h('th',{},'ID'), h('th',{},'Name'), h('th',{},'Type'), h('th',{},'Proto'),
+      compact?null:h('th',{},'Endpoint'),
+      h('th',{},'Codec'),
+      h('th',{},'Health'),
+      h('th',{},'Tags'),
+    )),
+    h('tbody',{}, ...sources.map(s=>h('tr',{},
+      h('td',{class:'mono'}, String(s.id)),
+      h('td',{}, s.name),
+      h('td',{}, s.source_type),
+      h('td',{}, s.protocol),
+      compact?null:h('td',{class:'mono'}, s.endpoint_url),
+      h('td',{}, s.codec),
+      h('td',{}, badgeFor(s.health_status)),
+      h('td',{}, (s.tags||[]).join(', '))
+    )))
+  );
+  return t;
+}
+
+async function wallsPage(){
+  const app = document.getElementById('app');
+  app.innerHTML = '';
+  const walls = await api('/walls');
+
+  const form = h('div',{class:'card'}, h('h3',{},'Create / Update Wall'),
+    h('div',{class:'row'},
+      h('div',{}, h('label',{},'ID (blank=create)'), h('input',{id:'wall_id', placeholder:'', class:'mono'})),
+      h('div',{}, h('label',{},'Name'), h('input',{id:'wall_name'})),
+    ),
+    h('div',{class:'row'},
+      h('div',{}, h('label',{},'Type'), h('select',{id:'wall_type'},
+        h('option',{value:'tilewall'},'tilewall'),
+        h('option',{value:'bigscreen'},'bigscreen'),
+      )),
+      h('div',{}, h('label',{},'Tile count'), h('input',{id:'wall_tile_count', type:'number', value:'1'})),
+      h('div',{}, h('label',{},'Resolution'), h('input',{id:'wall_resolution', placeholder:'1920x1080'})),
+    ),
+    h('div',{}, h('label',{},'Tags (comma-separated)'), h('input',{id:'wall_tags'})),
+    h('div',{style:'margin-top:10px;display:flex;gap:8px;'},
+      h('button',{onclick: async ()=>{
+        const id = document.getElementById('wall_id').value.trim();
+        const payload = {
+          name: document.getElementById('wall_name').value.trim(),
+          wall_type: document.getElementById('wall_type').value,
+          tile_count: parseInt(document.getElementById('wall_tile_count').value,10),
+          resolution: document.getElementById('wall_resolution').value.trim(),
+          tags: parseTags(document.getElementById('wall_tags').value),
+        };
+        if (!payload.name || !payload.resolution) return alert('name and resolution required');
+        try{
+          if (id){
+            await api('/walls/'+id, {method:'PUT', body: JSON.stringify(payload)});
+          }else{
+            await api('/walls', {method:'POST', body: JSON.stringify(payload)});
+          }
+          setActiveRoute('walls');
+        }catch(e){ alert(e.message); }
+      }}, 'Save'),
+      h('button',{onclick: async ()=>{
+        const id = document.getElementById('wall_id').value.trim();
+        if (!id) return alert('set ID');
+        if (!confirm('Delete wall '+id+'?')) return;
+        try{
+          await api('/walls/'+id, {method:'DELETE'});
+          setActiveRoute('walls');
+        }catch(e){ alert(e.message); }
+      }}, 'Delete')
+    )
+  );
+
+  app.appendChild(h('div',{class:'grid'}, form, h('div',{class:'card'}, h('h3',{},'Walls'), tableWalls(walls))));
+}
+
+async function sourcesPage(){
+  const app = document.getElementById('app');
+  app.innerHTML = '';
+  const sources = await api('/sources');
+
+  const form = h('div',{class:'card'}, h('h3',{},'Create / Update Source'),
+    h('div',{class:'row'},
+      h('div',{}, h('label',{},'ID (blank=create)'), h('input',{id:'src_id', class:'mono'})),
+      h('div',{}, h('label',{},'Name'), h('input',{id:'src_name'})),
+    ),
+    h('div',{class:'row'},
+      h('div',{}, h('label',{},'Type'), h('select',{id:'src_type'},
+        h('option',{value:'vdi'},'vdi'),
+        h('option',{value:'hdmi'},'hdmi'),
+      )),
+      h('div',{}, h('label',{},'Protocol'), h('select',{id:'src_proto'},
+        ['rtsp','rtp','srt','webrtc','http','other'].map(x=>h('option',{value:x},x))
+      )),
+      h('div',{}, h('label',{},'Codec'), h('input',{id:'src_codec', value:'h264'})),
+    ),
+    h('div',{}, h('label',{},'Endpoint URL'), h('input',{id:'src_url', class:'mono', placeholder:'rtsp://...'})),
+    h('div',{}, h('label',{},'Tags (comma-separated)'), h('input',{id:'src_tags'})),
+    h('div',{style:'margin-top:10px;display:flex;gap:8px;'},
+      h('button',{onclick: async ()=>{
+        const id = document.getElementById('src_id').value.trim();
+        const payload = {
+          name: document.getElementById('src_name').value.trim(),
+          source_type: document.getElementById('src_type').value,
+          protocol: document.getElementById('src_proto').value,
+          endpoint_url: document.getElementById('src_url').value.trim(),
+          codec: document.getElementById('src_codec').value.trim(),
+          tags: parseTags(document.getElementById('src_tags').value),
+          health_status: 'unknown'
+        };
+        if (!payload.name || !payload.endpoint_url) return alert('name and endpoint_url required');
+        try{
+          if (id){
+            await api('/sources/'+id, {method:'PUT', body: JSON.stringify(payload)});
+          }else{
+            await api('/sources', {method:'POST', body: JSON.stringify(payload)});
+          }
+          setActiveRoute('sources');
+        }catch(e){ alert(e.message); }
+      }}, 'Save'),
+      h('button',{onclick: async ()=>{
+        const id = document.getElementById('src_id').value.trim();
+        if (!id) return alert('set ID');
+        if (!confirm('Delete source '+id+'?')) return;
+        try{
+          await api('/sources/'+id, {method:'DELETE'});
+          setActiveRoute('sources');
+        }catch(e){ alert(e.message); }
+      }}, 'Delete')
+    )
+  );
+
+  app.appendChild(h('div',{class:'grid'}, form, h('div',{class:'card'}, h('h3',{},'Sources'), tableSources(sources))));
+}
+
+async function layoutsPage(){
+  const app = document.getElementById('app');
+  app.innerHTML = '';
+  const [walls, layouts] = await Promise.all([api('/walls'), api('/layouts')]);
+
+  const form = h('div',{class:'card'}, h('h3',{},'Create / Update Layout'),
+    h('div',{class:'row'},
+      h('div',{}, h('label',{},'Layout ID (blank=create)'), h('input',{id:'ly_id', class:'mono'})),
+      h('div',{}, h('label',{},'Wall'), h('select',{id:'ly_wall'},
+        ...walls.map(w=>h('option',{value:String(w.id)}, `${w.id}: ${w.name}`))
+      )),
+    ),
+    h('div',{}, h('label',{},'Name'), h('input',{id:'ly_name'})),
+    h('div',{}, h('label',{},'Preset name'), h('input',{id:'ly_preset', placeholder:'default'})),
+    h('div',{}, h('label',{},'Active'), h('select',{id:'ly_active'}, h('option',{value:'false'},'false'), h('option',{value:'true'},'true'))),
+    h('div',{}, h('label',{},'Grid config (JSON)'), h('textarea',{id:'ly_grid', rows:'8', class:'mono'}, JSON.stringify({rows:2, cols:2, tiles:[]}, null, 2))),
+    h('div',{style:'margin-top:10px;display:flex;gap:8px;'},
+      h('button',{onclick: async ()=>{
+        const id = document.getElementById('ly_id').value.trim();
+        let grid;
+        try { grid = JSON.parse(document.getElementById('ly_grid').value); } catch(e){ return alert('invalid JSON'); }
+        const payload = {
+          wall_id: parseInt(document.getElementById('ly_wall').value,10),
+          name: document.getElementById('ly_name').value.trim(),
+          preset_name: document.getElementById('ly_preset').value.trim(),
+          is_active: document.getElementById('ly_active').value === 'true',
+          grid_config: grid
+        };
+        if (!payload.name) return alert('name required');
+        try{
+          if (id){
+            await api('/layouts/'+id, {method:'PUT', body: JSON.stringify(payload)});
+          }else{
+            await api('/layouts', {method:'POST', body: JSON.stringify(payload)});
+          }
+          setActiveRoute('layouts');
+        }catch(e){ alert(e.message); }
+      }}, 'Save'),
+      h('button',{onclick: async ()=>{
+        const id = document.getElementById('ly_id').value.trim();
+        if (!id) return alert('set layout ID');
+        try{
+          await api('/layouts/'+id+'/activate', {method:'PUT'});
+          setActiveRoute('layouts');
+        }catch(e){ alert(e.message); }
+      }}, 'Activate'),
+      h('button',{onclick: async ()=>{
+        const id = document.getElementById('ly_id').value.trim();
+        if (!id) return alert('set ID');
+        if (!confirm('Delete layout '+id+'?')) return;
+        try{
+          await api('/layouts/'+id, {method:'DELETE'});
+          setActiveRoute('layouts');
+        }catch(e){ alert(e.message); }
+      }}, 'Delete')
+    )
+  );
+
+  const tbl = h('table',{},
+    h('thead',{}, h('tr',{}, h('th',{},'ID'), h('th',{},'Wall'), h('th',{},'Name'), h('th',{},'Ver'), h('th',{},'Active'), h('th',{},'Preview'))),
+    h('tbody',{}, ...layouts.map(l=>{
+      const prev = miniGrid(l.grid_config || {});
+      return h('tr',{},
+        h('td',{class:'mono'}, String(l.id)),
+        h('td',{}, String(l.wall_id)),
+        h('td',{}, l.name),
+        h('td',{}, String(l.version)),
+        h('td',{}, l.is_active ? 'true' : 'false'),
+        h('td',{}, prev)
+      );
+    }))
+  );
+
+  app.appendChild(h('div',{class:'grid'}, form, h('div',{class:'card'}, h('h3',{},'Layouts'), tbl)));
+}
+
+async function policyPage(){
+  const app = document.getElementById('app');
+  app.innerHTML = '';
+
+  const walls = await api('/walls');
+  const sources = await api('/sources');
+
+  const form = h('div',{class:'card'}, h('h3',{},'Evaluate policy'),
+    h('div',{class:'row'},
+      h('div',{}, h('label',{},'Wall'), h('select',{id:'pe_wall'}, ...walls.map(w=>h('option',{value:String(w.id)}, `${w.id}: ${w.name}`)))),
+      h('div',{}, h('label',{},'Source'), h('select',{id:'pe_src'}, ...sources.map(s=>h('option',{value:String(s.id)}, `${s.id}: ${s.name}`)))),
+    ),
+    h('div',{style:'margin-top:10px;display:flex;gap:8px;'},
+      h('button',{onclick: async ()=>{
+        try{
+          const res = await api('/policy/evaluate', {method:'POST', body: JSON.stringify({
+            wall_id: parseInt(document.getElementById('pe_wall').value,10),
+            source_id: parseInt(document.getElementById('pe_src').value,10),
+          })});
+          document.getElementById('pe_out').textContent = JSON.stringify(res, null, 2);
+        }catch(e){ alert(e.message); }
+      }}, 'Evaluate'),
+    ),
+    h('pre',{id:'pe_out', class:'mono'}, '')
+  );
+
+  app.appendChild(form);
+}
+
+async function auditPage(){
+  const app = document.getElementById('app');
+  app.innerHTML = '';
+
+  const form = h('div',{class:'card'}, h('h3',{},'Audit query'),
+    h('div',{class:'row'},
+      h('div',{}, h('label',{},'Action'), h('input',{id:'aq_action', placeholder:'walls.create'})),
+      h('div',{}, h('label',{},'Actor'), h('input',{id:'aq_actor', placeholder:'username'})),
+      h('div',{}, h('label',{},'Since (ISO8601)'), h('input',{id:'aq_since', placeholder:'2026-02-21T00:00:00Z'})),
+    ),
+    h('div',{style:'margin-top:10px;display:flex;gap:8px;'},
+      h('button',{onclick: async ()=>{
+        try{
+          const qp = new URLSearchParams();
+          const a = document.getElementById('aq_action').value.trim(); if (a) qp.set('action', a);
+          const ac = document.getElementById('aq_actor').value.trim(); if (ac) qp.set('actor', ac);
+          const s = document.getElementById('aq_since').value.trim(); if (s) qp.set('since', s);
+          const res = await api('/audit/query?' + qp.toString());
+          document.getElementById('aq_out').textContent = JSON.stringify(res, null, 2);
+        }catch(e){ alert(e.message); }
+      }}, 'Query'),
+    ),
+    h('pre',{id:'aq_out', class:'mono'}, '')
+  );
+
+  app.appendChild(form);
+}
+
+async function bundlePage(){
+  const app = document.getElementById('app');
+  app.innerHTML = '';
+
+  const card = h('div',{class:'card'}, h('h3',{},'Bundle export'),
+    h('div',{}, 'Exports walls + sources + active layouts as JSON.'),
+    h('div',{style:'margin-top:10px;display:flex;gap:8px;'},
+      h('button',{onclick: async ()=>{
+        try{
+          const res = await api('/bundles/export', {method:'POST'});
+          const blob = new Blob([JSON.stringify(res, null, 2)], {type:'application/json'});
+          const url = URL.createObjectURL(blob);
+          const a = h('a', {href:url, download:'vw-bundle.json'}, 'Download vw-bundle.json');
+          const out = document.getElementById('bundle_out');
+          out.innerHTML = '';
+          out.appendChild(a);
+        }catch(e){ alert(e.message); }
+      }}, 'Export'),
+    ),
+    h('div',{id:'bundle_out', style:'margin-top:10px;'})
+  );
+  app.appendChild(card);
+}
+
+async function render(){
+  renderNav();
+  await renderWho();
+  const r = currentRoute();
+  if (r === 'walls') return wallsPage();
+  if (r === 'sources') return sourcesPage();
+  if (r === 'layouts') return layoutsPage();
+  if (r === 'policy') return policyPage();
+  if (r === 'audit') return auditPage();
+  if (r === 'bundle') return bundlePage();
+  return dashboard();
+}
+
+window.addEventListener('hashchange', render);
+render();
+</script>
+</body>
+</html>

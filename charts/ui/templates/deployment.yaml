@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vw-ui
+  labels:
+    app: vw-ui
+spec:
+  replicas: { { .Values.replicaCount } }
+  selector:
+    matchLabels:
+      app: vw-ui
+  template:
+    metadata:
+      labels:
+        app: vw-ui
+    spec:
+      securityContext:
+{ toYaml .Values.podSecurityContext | indent 8 }
+      containers:
+        - name: vw-ui
+          image: "{{ .Values.global.registry }}/{{ .Values.image.repository }}:{{ .Values.global.imageTag }}"
+          imagePullPolicy: "{{ .Values.global.imagePullPolicy }}"
+          ports:
+            - containerPort: { { .Values.service.port } }
+          env:
+{- range $k, $v := .Values.env }
+            - name: { $k }
+              value: "{ $v }"
+{- end }
+          securityContext:
+{ toYaml .Values.securityContext | indent 12 }
+          resources:
+{ toYaml .Values.resources | indent 12 }

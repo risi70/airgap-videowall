@@ -1,0 +1,40 @@
+version: 1
+taxonomy:
+  classifications: [U, C, S]   # Unclassified, Confidential, Secret
+  departments: [ops, intel, it, training]
+  purposes: [briefing, monitoring, analysis]
+
+defaults:
+  deny_reason: "default_deny"
+
+# Explicit allow-list is evaluated as a condition (in_explicit_allow_list)
+allow_list:
+  - operator_id: "alice"
+    wall_id: 1
+    source_id: 1
+
+rules:
+  # 1) Admin bypass handled in code (role check), included here for documentation.
+  - id: "rule-1-operator-clearance"
+    effect: "allow"
+    description: "Operator must have all source tags (subset) for clearance/purpose/department."
+    when:
+      - source_tags_subset_of_operator_tags: true
+
+  - id: "rule-2-wall-source-tag-overlap"
+    effect: "allow"
+    description: "Allow if source tags intersect with wall tags (e.g., same department/purpose)."
+    when:
+      - source_tags_intersect_wall_tags: true
+
+  - id: "rule-3-explicit-allow-list"
+    effect: "allow"
+    description: "Allow if tuple is present in explicit allow_list."
+    when:
+      - in_explicit_allow_list: true
+
+  - id: "rule-4-viewer-deny"
+    effect: "deny"
+    description: "Viewers are denied unless earlier rule allowed."
+    when:
+      - always: true
