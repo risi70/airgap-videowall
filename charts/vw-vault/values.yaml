@@ -1,0 +1,53 @@
+replicaCount: 3
+
+image:
+  repository: hashicorp/vault
+  tag: "1.15.4"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  apiPort: 8200
+  clusterPort: 8201
+
+storage:
+  size: "10Gi"
+  storageClass: ""
+
+ha:
+  enabled: true
+  raft:
+    enabled: true
+
+unseal:
+  shamir:
+    shares: 5
+    threshold: 3
+
+pki:
+  # Run setup-pki.sh as a post-install Job
+  bootstrapEnabled: true
+  rootTTL: "87600h"
+  intermediateTTL: "43800h"
+  serverMaxTTL: "2160h"
+  clientMaxTTL: "720h"
+
+injector:
+  enabled: true
+
+securityContext:
+  runAsNonRoot: true
+  runAsUser: 100
+  runAsGroup: 1000
+  fsGroup: 1000
+
+resources:
+  requests:
+    cpu: "250m"
+    memory: "256Mi"
+  limits:
+    cpu: "1"
+    memory: "512Mi"
+
+networkPolicy:
+  enabled: true

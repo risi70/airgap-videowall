@@ -1,0 +1,11 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "vw-sfu-janus.fullname" . }}-pdb
+  labels:
+    app.kubernetes.io/name: {{ include "vw-sfu-janus.name" . }}
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "vw-sfu-janus.name" . }}

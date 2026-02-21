@@ -452,7 +452,15 @@ async def policy_evaluate(payload: dict[str, Any], user: dict[str, Any] = Depend
         operator_roles=roles,
         operator_tags=[str(x) for x in operator_tags],
     )
-    return await _policy_evaluate(req)
+    result = await _policy_evaluate(req)
+    await append_audit_event(
+        action="policy.evaluate",
+        actor=operator_id,
+        object_type="policy",
+        object_id=f"{req.wall_id}:{req.source_id}",
+        details={"allowed": result.allowed, "reason": result.reason},
+    )
+    return result
 
 
 def _mint_stream_token(*, sub: str, wall_id: int, source_id: int, tile_id: str) -> str:
@@ -484,8 +492,22 @@ async def tokens_subscribe(payload: TokenSubscribeRequest, user: dict[str, Any] 
     )
     presp = await _policy_evaluate(preq)
     if not presp.allowed:
+        await append_audit_event(
+            action="tokens.subscribe.deny",
+            actor=operator_id,
+            object_type="token",
+            object_id=f"{payload.wall_id}:{payload.source_id}:{payload.tile_id}",
+            details={"reason": presp.reason, "wall_id": payload.wall_id, "source_id": payload.source_id},
+        )
         return TokenSubscribeResponse(allowed=False, reason=presp.reason, token=None)
     token = _mint_stream_token(sub=operator_id, wall_id=payload.wall_id, source_id=payload.source_id, tile_id=payload.tile_id)
+    await append_audit_event(
+        action="tokens.subscribe.allow",
+        actor=operator_id,
+        object_type="token",
+        object_id=f"{payload.wall_id}:{payload.source_id}:{payload.tile_id}",
+        details={"wall_id": payload.wall_id, "source_id": payload.source_id, "tile_id": payload.tile_id},
+    )
     return TokenSubscribeResponse(allowed=True, reason="allowed", token=token)
 
 
@@ -591,3 +613,47 @@ async def audit_query(
             d["details"] = json.loads(d["details"])
         out.append(AuditEventOut(**d))
     return out
+
+
+# ---- Audit verify / export proxies ----
+
+@app.get("/api/v1/audit/verify")
+async def audit_verify(last_n: int = 1000, _: dict[str, Any] = Depends(require_role("admin"))) -> dict[str, Any]:
+    """Proxy to vw-audit /verify endpoint — walks the hash chain and reports integrity."""
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        r = await client.get(f"{settings.audit_url}/verify", params={"last_n": last_n})
+    if r.status_code != 200:
+        raise HTTPException(status_code=502, detail="audit_service_error")
+    return r.json()
+
+
+@app.get("/api/v1/audit/export")
+async def audit_export(
+    since: str | None = None,
+    until: str | None = None,
+    _: dict[str, Any] = Depends(require_role("admin")),
+) -> dict[str, Any]:
+    """Proxy to vw-audit /export endpoint — returns signed JSONL."""
+    params: dict[str, str] = {}
+    if since:
+        params["since"] = since
+    if until:
+        params["until"] = until
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        r = await client.get(f"{settings.audit_url}/export", params=params)
+    if r.status_code != 200:
+        raise HTTPException(status_code=502, detail="audit_service_error")
+    return r.json()
+
+
+# ---- Gateway probe proxy ----
+
+@app.post("/api/v1/gateway/probe")
+async def gateway_probe(payload: dict[str, Any], _: dict[str, Any] = Depends(require_role("operator", "admin"))) -> dict[str, Any]:
+    """Proxy probe request to vw-gateway for source onboarding validation."""
+    gw_url = settings.health_url.replace("vw-health", "vw-gw").replace(":8003", ":8004")
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        r = await client.post(f"{gw_url}/probe", json=payload)
+    if r.status_code != 200:
+        raise HTTPException(status_code=502, detail="gateway_probe_error")
+    return r.json()

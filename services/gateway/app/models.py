@@ -25,7 +25,12 @@ class IngestDefinition(BaseModel):
     input_url: str
     input_protocol: Literal["rtsp", "srt", "rtp"]
     output_url: str
-    output_protocol: Literal["srt"] = "srt"
+    output_protocol: Literal["srt", "webrtc"] = "srt"
+
+    # Janus WebRTC republish fields (required when output_protocol=webrtc)
+    janus_url: Optional[str] = Field(default=None, description="Janus HTTP/WS base URL for signaling")
+    janus_room_id: Optional[int] = Field(default=None, description="Janus VideoRoom room ID")
+    janus_token: Optional[str] = Field(default=None, description="Janus auth token for publish")
 
     # RTP specifics
     rtp_port: Optional[int] = Field(default=None, description="Required for input_protocol=rtp")

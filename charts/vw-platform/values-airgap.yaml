@@ -19,3 +19,9 @@ vw-compositor:
     repository: "registry.local:5000/vw-compositor"
     tag: "0.1.0"
   imagePullPolicy: IfNotPresent
+
+vw-vault:
+  image:
+    repository: "registry.local:5000/hashicorp/vault"
+    tag: "1.15.4"
+  imagePullPolicy: IfNotPresent

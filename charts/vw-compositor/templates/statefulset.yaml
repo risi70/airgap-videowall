@@ -1,11 +1,12 @@
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: {{ include "vw-compositor.fullname" . }}
   labels:
     app.kubernetes.io/name: {{ include "vw-compositor.name" . }}
 spec:
   replicas: {{ .Values.replicaCount }}
+  serviceName: {{ include "vw-compositor.fullname" . }}
   selector:
     matchLabels:
       app.kubernetes.io/name: {{ include "vw-compositor.name" . }}
@@ -13,6 +14,10 @@ spec:
     metadata:
       labels:
         app.kubernetes.io/name: {{ include "vw-compositor.name" . }}
+      annotations:
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/agent-inject-secret-tls.crt: "pki_int/issue/server-cert"
+        vault.hashicorp.com/role: "compositor"
     spec:
       nodeSelector:
 {{ toYaml .Values.nodeSelector | indent 8 }}
@@ -23,6 +28,7 @@ spec:
       securityContext:
         runAsNonRoot: true
         runAsUser: 10001
+        fsGroup: 10001
       containers:
         - name: vw-compositor
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -43,3 +49,14 @@ spec:
             periodSeconds: 10
           resources:
 {{ toYaml .Values.resources | indent 12 }}
+          volumeMounts:
+            - name: pipeline-state
+              mountPath: /var/lib/vw-compositor
+  volumeClaimTemplates:
+    - metadata:
+        name: pipeline-state
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.persistence.size | default "10Gi" }}

@@ -220,3 +220,56 @@ async def verify(last_n: int = Query(default=1000, ge=1, le=200000)) -> dict[str
         expected_prev = h
 
     return {"chain_id": settings.chain_id, "checked": len(rows_fwd), "verified": verified, "broken": broken}
+
+
+@app.get("/export")
+async def export_log(
+    since: str | None = None,
+    until: str | None = None,
+    limit: int = Query(default=10000, ge=1, le=100000),
+) -> dict[str, Any]:
+    """Export audit entries as a JSON array with an HMAC signature over the content."""
+    pool = await get_pool()
+    clauses = ["chain_id=$1"]
+    args: list[Any] = [settings.chain_id]
+    idx = 2
+
+    if since:
+        clauses.append(f"ts>=${idx}")
+        args.append(datetime.fromisoformat(since.replace("Z", "+00:00")))
+        idx += 1
+    if until:
+        clauses.append(f"ts<=${idx}")
+        args.append(datetime.fromisoformat(until.replace("Z", "+00:00")))
+        idx += 1
+
+    where = " AND ".join(clauses)
+    q = f"""
+      SELECT id, ts, chain_id, action, actor, object_type, object_id, details, prev_hash, hash
+      FROM audit_store
+      WHERE {where}
+      ORDER BY id ASC
+      LIMIT {int(limit)}
+    """
+    async with pool.acquire() as conn:
+        rows = await conn.fetch(q, *args)
+
+    entries: list[dict[str, Any]] = []
+    for r in rows:
+        d = dict(r)
+        d["ts"] = d["ts"].isoformat()
+        d["id"] = int(d["id"])
+        if isinstance(d["details"], str):
+            d["details"] = json.loads(d["details"])
+        entries.append(d)
+
+    # HMAC signature over canonical JSON of entries
+    canonical = json.dumps(entries, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    sig = hashlib.sha256(canonical).hexdigest()
+
+    return {
+        "chain_id": settings.chain_id,
+        "count": len(entries),
+        "entries": entries,
+        "digest_sha256": sig,
+    }

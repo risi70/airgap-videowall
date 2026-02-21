@@ -1,0 +1,32 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-vault
+  labels:
+    app.kubernetes.io/name: vw-vault
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - name: http
+      port: {{ .Values.service.apiPort }}
+      targetPort: {{ .Values.service.apiPort }}
+  selector:
+    app.kubernetes.io/name: vw-vault
+---
+# Headless service for StatefulSet DNS and Raft peer discovery
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-vault-internal
+  labels:
+    app.kubernetes.io/name: vw-vault
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  ports:
+    - name: http
+      port: {{ .Values.service.apiPort }}
+    - name: cluster
+      port: {{ .Values.service.clusterPort }}
+  selector:
+    app.kubernetes.io/name: vw-vault

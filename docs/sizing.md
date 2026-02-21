@@ -1,10 +1,14 @@
 # Sizing (baseline assumptions)
+
+> **v2 Reference Sizing (normative — REQ-SIZE-001, REQ-SIZE-002)**
+
 Assumptions:
-- W=4 walls (2×24-tile 1080p; 2×2-screen 4K)
-- Sources=28 (20 VDI + 8 HDMI encoders)
-- N=64 max concurrent streams
-- Two latency classes: interactive (sub-second) and broadcast-grade (seconds)
-- Typical codecs: H.264 baseline/high; optional H.265 for 4K where supported
+- **W=4 walls**: 2× 24-tile tilewall (6×4 grid, 1080p per tile) + 2× dual-4K bigscreen
+- **Sources=28**: 20 VDI + 8 HDMI encoders
+- **N=64 max concurrent streams**: 48 tiles + 16 compositor inputs
+- **Latency classes**: WebRTC interactive <500ms, SRT/compositor 2–6s
+- **Codec policy**: tiles MUST use H.264 High Profile; mosaics SHOULD use HEVC Main
+- **Bitrates**: 1080p H.264 @ 6 Mbps, 4K HEVC @ 15 Mbps
 
 ## Sizing table (rule-of-thumb)
 

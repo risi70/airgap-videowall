@@ -146,15 +146,44 @@ def _coerce_tags(v: Any) -> list[str]:
     return [str(v)]
 
 
-# In a full system, tags come from DB; for unit tests we allow injecting them via request extensions.
-def _lookup_tags_stub(wall_id: int, source_id: int) -> tuple[list[str], list[str]]:
-    # Default: empty tags. Tests can monkeypatch this function.
-    return ([], [])
+# Tag lookup: fetch wall and source tags from mgmt-api for policy evaluation.
+# Falls back to empty tags if the API is unreachable (fail-open on enrichment,
+# fail-closed on policy decision).
+
+import os as _os
+import urllib.request as _urllib_request
+
+_MGMT_API_URL = _os.environ.get("VW_MGMT_API_URL", "http://vw-mgmt-api:8000")
+
+
+def _lookup_tags(wall_id: int, source_id: int) -> tuple[list[str], list[str]]:
+    """Fetch wall and source tags from mgmt-api."""
+    wall_tags: list[str] = []
+    source_tags: list[str] = []
+    try:
+        import json as _json
+        url = f"{_MGMT_API_URL}/api/v1/walls/{wall_id}"
+        req = _urllib_request.Request(url, method="GET")
+        with _urllib_request.urlopen(req, timeout=2) as resp:
+            data = _json.loads(resp.read())
+            wall_tags = [str(t) for t in (data.get("tags") or [])]
+    except Exception:
+        pass
+    try:
+        import json as _json
+        url = f"{_MGMT_API_URL}/api/v1/sources/{source_id}"
+        req = _urllib_request.Request(url, method="GET")
+        with _urllib_request.urlopen(req, timeout=2) as resp:
+            data = _json.loads(resp.read())
+            source_tags = [str(t) for t in (data.get("tags") or [])]
+    except Exception:
+        pass
+    return (wall_tags, source_tags)
 
 
 @app.post("/evaluate", response_model=EvalResponse)
 def evaluate(req: EvalRequest) -> EvalResponse:
-    wall_tags, source_tags = _lookup_tags_stub(req.wall_id, req.source_id)
+    wall_tags, source_tags = _lookup_tags(req.wall_id, req.source_id)
     return ENGINE.evaluate(
         wall_id=req.wall_id,
         source_id=req.source_id,

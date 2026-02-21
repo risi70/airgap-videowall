@@ -1,0 +1,40 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ .Release.Name }}-vault-np
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: vw-vault
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    # API access from all vw namespaces (Vault Agent sidecars)
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              app.kubernetes.io/part-of: videowall
+      ports:
+        - { protocol: TCP, port: {{ .Values.service.apiPort }} }
+    # Raft cluster traffic between Vault pods
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: vw-vault
+      ports:
+        - { protocol: TCP, port: {{ .Values.service.clusterPort }} }
+  egress:
+    # Raft peer communication
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: vw-vault
+      ports:
+        - { protocol: TCP, port: {{ .Values.service.clusterPort }} }
+        - { protocol: TCP, port: {{ .Values.service.apiPort }} }
+    # Kubernetes API for service registration and auth
+    - to:
+        - ipBlock: { cidr: "0.0.0.0/0" }
+      ports:
+        - { protocol: TCP, port: 443 }
+{{- end }}

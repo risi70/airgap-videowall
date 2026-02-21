@@ -13,7 +13,15 @@ spec:
     metadata:
       labels:
         app.kubernetes.io/name: {{ include "vw-sfu-janus.name" . }}
+      annotations:
+        vault.hashicorp.com/agent-inject: "true"
+        vault.hashicorp.com/agent-inject-secret-tls.crt: "pki_int/issue/server-cert"
+        vault.hashicorp.com/agent-inject-secret-tls.key: "pki_int/issue/server-cert"
+        vault.hashicorp.com/role: "sfu"
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
       containers:
         - name: janus
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"

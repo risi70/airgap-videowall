@@ -6,8 +6,11 @@ image:
   pullPolicy: IfNotPresent
 
 service:
-  type: ClusterIP
+  type: LoadBalancer
   port: 8004
+  metallbAddressPool: "default"
+  srtPortStart: 9000
+  srtPortEnd: 9100
 
 resources: {}
 

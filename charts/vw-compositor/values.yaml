@@ -6,15 +6,25 @@ image:
   pullPolicy: IfNotPresent
 
 service:
-  type: ClusterIP
+  type: LoadBalancer
   port: 8005
+  metallbAddressPool: "default"
 
-resources: {}
+resources:
+  limits:
+    nvidia.com/gpu: "1"
+  requests:
+    cpu: "2"
+    memory: "4Gi"
+
+persistence:
+  size: "10Gi"
 
 env:
   VW_POLICY_SERVICE_URL: "http://vw-policy.vw-control.svc.cluster.local:8002"
 
-nodeSelector: {}
+nodeSelector:
+  nvidia.com/gpu.present: "true"
 tolerations: []
 affinity: {}
 

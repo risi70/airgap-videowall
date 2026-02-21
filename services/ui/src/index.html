@@ -298,6 +298,23 @@ async function sourcesPage(){
           setActiveRoute('sources');
         }catch(e){ alert(e.message); }
       }}, 'Delete')
+    ),
+    h('div',{style:'margin-top:12px; border-top:1px solid #eee; padding-top:10px;'},
+      h('h4',{}, 'Probe source URL'),
+      h('div',{style:'display:flex;gap:8px;'},
+        h('select',{id:'probe_proto'}, ['rtsp','srt','rtp','http','https'].map(x=>h('option',{value:x},x))),
+        h('input',{id:'probe_url', style:'flex:1', placeholder:'srt://encoder:9000?mode=caller'}),
+        h('button',{onclick: async ()=>{
+          try{
+            const res = await api('/gateway/probe', {method:'POST', body: JSON.stringify({
+              url: document.getElementById('probe_url').value.trim(),
+              protocol: document.getElementById('probe_proto').value,
+            })});
+            document.getElementById('probe_out').textContent = JSON.stringify(res, null, 2);
+          }catch(e){ alert(e.message); }
+        }}, 'Probe'),
+      ),
+      h('pre',{id:'probe_out', class:'mono', style:'margin-top:6px;'}, '')
     )
   );
 
@@ -430,6 +447,27 @@ async function auditPage(){
           document.getElementById('aq_out').textContent = JSON.stringify(res, null, 2);
         }catch(e){ alert(e.message); }
       }}, 'Query'),
+      h('button',{onclick: async ()=>{
+        try{
+          const res = await api('/audit/verify');
+          const ok = res.broken && res.broken.length === 0;
+          document.getElementById('aq_out').textContent =
+            (ok ? '✅ Chain integrity verified' : '❌ Chain BROKEN') + '\n\n' +
+            JSON.stringify(res, null, 2);
+        }catch(e){ alert(e.message); }
+      }}, 'Verify Chain'),
+      h('button',{onclick: async ()=>{
+        try{
+          const res = await api('/audit/export');
+          const blob = new Blob([JSON.stringify(res, null, 2)], {type:'application/json'});
+          const url = URL.createObjectURL(blob);
+          const a = h('a', {href:url, download:'audit-export.json'}, 'Download audit-export.json');
+          const out = document.getElementById('aq_out');
+          out.innerHTML = '';
+          out.appendChild(a);
+          out.appendChild(document.createTextNode('\n\nEntries: ' + res.count + '  Digest: ' + res.digest_sha256));
+        }catch(e){ alert(e.message); }
+      }}, 'Export Signed'),
     ),
     h('pre',{id:'aq_out', class:'mono'}, '')
   );
@@ -441,9 +479,11 @@ async function bundlePage(){
   const app = document.getElementById('app');
   app.innerHTML = '';
 
-  const card = h('div',{class:'card'}, h('h3',{},'Bundle export'),
+  const card = h('div',{class:'card'}, h('h3',{},'Bundle management'),
+
+    h('h4',{}, 'Export'),
     h('div',{}, 'Exports walls + sources + active layouts as JSON.'),
-    h('div',{style:'margin-top:10px;display:flex;gap:8px;'},
+    h('div',{style:'margin-top:6px;'},
       h('button',{onclick: async ()=>{
         try{
           const res = await api('/bundles/export', {method:'POST'});
@@ -456,7 +496,55 @@ async function bundlePage(){
         }catch(e){ alert(e.message); }
       }}, 'Export'),
     ),
-    h('div',{id:'bundle_out', style:'margin-top:10px;'})
+    h('div',{id:'bundle_out', style:'margin-top:6px;'}),
+
+    h('h4',{style:'margin-top:16px;'}, 'Import'),
+    h('div',{}, 'Upload a bundle JSON and stage it by ring.'),
+    h('div',{style:'display:flex;gap:8px;margin-top:6px;align-items:center;'},
+      h('input',{id:'bundle_file', type:'file', accept:'.json'}),
+      h('select',{id:'bundle_ring'}, h('option',{value:'dev'},'dev'), h('option',{value:'test'},'test'), h('option',{value:'prod'},'prod')),
+      h('button',{onclick: async ()=>{
+        const fileInput = document.getElementById('bundle_file');
+        if (!fileInput.files || !fileInput.files[0]) return alert('Select a bundle JSON file');
+        try{
+          const text = await fileInput.files[0].text();
+          const payload = JSON.parse(text);
+          const ring = document.getElementById('bundle_ring').value;
+          const res = await api('/bundles/import', {method:'POST', body: JSON.stringify({ring:ring, payload:payload})});
+          document.getElementById('import_out').textContent = JSON.stringify(res, null, 2);
+        }catch(e){ alert(e.message); }
+      }}, 'Import & Stage'),
+    ),
+    h('pre',{id:'import_out', class:'mono', style:'margin-top:6px;'}, ''),
+
+    h('h4',{style:'margin-top:16px;'}, 'Diff'),
+    h('div',{}, 'Compare bundle against current state.'),
+    h('div',{style:'display:flex;gap:8px;margin-top:6px;'},
+      h('input',{id:'diff_file', type:'file', accept:'.json'}),
+      h('button',{onclick: async ()=>{
+        const fileInput = document.getElementById('diff_file');
+        if (!fileInput.files || !fileInput.files[0]) return alert('Select a bundle JSON file');
+        try{
+          const text = await fileInput.files[0].text();
+          const bundleData = JSON.parse(text);
+          const current = await api('/bundles/export', {method:'POST'});
+          // Client-side diff
+          const diffs = [];
+          const bw = new Set((bundleData.walls||[]).map(w=>JSON.stringify(w)));
+          const cw = new Set((current.walls||[]).map(w=>JSON.stringify(w)));
+          bw.forEach(w => { if(!cw.has(w)) diffs.push({type:'wall', action:'add/change', data:JSON.parse(w)}); });
+          cw.forEach(w => { if(!bw.has(w)) diffs.push({type:'wall', action:'remove/change', data:JSON.parse(w)}); });
+          const bs = new Set((bundleData.sources||[]).map(s=>JSON.stringify(s)));
+          const cs = new Set((current.sources||[]).map(s=>JSON.stringify(s)));
+          bs.forEach(s => { if(!cs.has(s)) diffs.push({type:'source', action:'add/change', data:JSON.parse(s)}); });
+          cs.forEach(s => { if(!bs.has(s)) diffs.push({type:'source', action:'remove/change', data:JSON.parse(s)}); });
+          document.getElementById('diff_out').textContent = diffs.length === 0 ?
+            '✅ No differences' :
+            diffs.map(d => `${d.action} ${d.type}: ${d.data.name||d.data.id}`).join('\n');
+        }catch(e){ alert(e.message); }
+      }}, 'Diff'),
+    ),
+    h('pre',{id:'diff_out', class:'mono', style:'margin-top:6px;'}, '')
   );
   app.appendChild(card);
 }

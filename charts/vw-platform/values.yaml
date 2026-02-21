@@ -5,6 +5,7 @@ global:
 vw-sfu-janus: {}
 vw-gw: {}
 vw-compositor: {}
+vw-vault: {}
 
 # Stubs disabled by default; replace with real charts
 vw-mgmt-api:

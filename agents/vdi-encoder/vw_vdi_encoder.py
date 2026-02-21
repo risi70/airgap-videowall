@@ -103,9 +103,19 @@ def build_pipeline(
     if output_mode.lower() == "rtp":
         # RTP over UDP (output_url like udp://ip:port)
         return f"ximagesrc use-damage=0 ! videoconvert ! videoscale ! {caps} ! {enc} ! rtph264pay pt=96 config-interval=1 ! udpsink host={output_url.split(':')[0]} port={output_url.split(':')[1]}"
-    # Placeholder for WebRTC: typically handled via webrtcbin and signalling service.
-    # Keep pipeline minimal and explicit that it needs adaptation.
-    return f"ximagesrc use-damage=0 ! videoconvert ! videoscale ! {caps} ! {enc} ! fakesink"
+    if output_mode.lower() == "webrtc":
+        # WebRTC publish via webrtcbin to Janus VideoRoom.
+        # Signaling is handled out-of-band by the Janus REST API or
+        # a companion signaling helper.  webrtcbin negotiates ICE/DTLS
+        # and sends SRTP directly to the Janus SFU.
+        return (
+            f"ximagesrc use-damage=0 ! videoconvert ! videoscale ! {caps} "
+            f"! {enc} ! h264parse config-interval=1 "
+            f"! rtph264pay pt=96 config-interval=1 "
+            f"! application/x-rtp,media=video,encoding-name=H264,payload=96 "
+            f"! webrtcbin name=sendrecv bundle-policy=max-bundle"
+        )
+    raise ValueError(f"Unsupported output_mode={output_mode}; expected srt|rtp|webrtc")
 
 
 def run_pipeline(pipeline: str, *, display: str, state: EncoderState) -> int:

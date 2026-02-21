@@ -1,0 +1,5 @@
+apiVersion: v2
+name: vw-vault
+description: HashiCorp Vault HA with Raft storage for Videowall PKI
+version: 0.1.0
+appVersion: "1.15.0"
