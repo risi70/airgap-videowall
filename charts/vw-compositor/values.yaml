@@ -1,0 +1,37 @@
+replicaCount: 1
+
+image:
+  repository: vw-compositor
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8005
+
+resources: {}
+
+env:
+  VW_POLICY_SERVICE_URL: "http://vw-policy.vw-control.svc.cluster.local:8002"
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+networkPolicy:
+  enabled: true
+  fromMgmtApiSelector:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: vw-control
+    podSelector:
+      matchLabels:
+        app.kubernetes.io/name: vw-mgmt-api
+  toPolicySelector:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: vw-control
+    podSelector:
+      matchLabels:
+        app.kubernetes.io/name: vw-policy
+  toSourceCidrs: []

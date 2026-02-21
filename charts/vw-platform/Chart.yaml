@@ -1,0 +1,31 @@
+apiVersion: v2
+name: vw-platform
+description: Umbrella chart for airgap-videowall (control + media + display)
+type: application
+version: 0.1.0
+dependencies:
+  - name: vw-sfu-janus
+    version: 0.1.0
+    repository: "file://../vw-sfu-janus"
+  - name: vw-gw
+    version: 0.1.0
+    repository: "file://../vw-gw"
+  - name: vw-compositor
+    version: 0.1.0
+    repository: "file://../vw-compositor"
+  # Stub charts for non-media-plane components (expected from Module 1 / other modules)
+  - name: vw-mgmt-api
+    version: 0.0.1
+    repository: "file://../vw-mgmt-api"
+  - name: vw-policy
+    version: 0.0.1
+    repository: "file://../vw-policy"
+  - name: vw-audit
+    version: 0.0.1
+    repository: "file://../vw-audit"
+  - name: vw-obs
+    version: 0.0.1
+    repository: "file://../vw-obs"
+  - name: vw-postgres
+    version: 0.0.1
+    repository: "file://../vw-postgres"

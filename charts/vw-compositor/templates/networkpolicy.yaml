@@ -1,0 +1,54 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "vw-compositor.fullname" . }}-np
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "vw-compositor.name" . }}
+  policyTypes: ["Ingress","Egress"]
+  ingress:
+    - from:
+        - namespaceSelector:
+{{ toYaml .Values.networkPolicy.fromMgmtApiSelector.namespaceSelector | indent 12 }}
+          podSelector:
+{{ toYaml .Values.networkPolicy.fromMgmtApiSelector.podSelector | indent 12 }}
+      ports:
+        - { protocol: TCP, port: 8005 }
+
+  egress:
+    # Policy service (fail-closed in app, NP allows only the expected peer)
+    - to:
+        - namespaceSelector:
+{{ toYaml .Values.networkPolicy.toPolicySelector.namespaceSelector | indent 12 }}
+          podSelector:
+{{ toYaml .Values.networkPolicy.toPolicySelector.podSelector | indent 12 }}
+      ports:
+        - { protocol: TCP, port: 8002 }
+
+    {{- $cidrs := .Values.networkPolicy.toSourceCidrs }}
+    {{- if $cidrs }}
+    - to:
+      {{- range $cidrs }}
+        - ipBlock: { cidr: {{ . | quote }} }
+      {{- end }}
+      ports:
+        - { protocol: TCP, port: 554 }
+        - { protocol: TCP, port: 80 }
+        - { protocol: TCP, port: 443 }
+    - to:
+      {{- range $cidrs }}
+        - ipBlock: { cidr: {{ . | quote }} }
+      {{- end }}
+    {{- else }}
+    - to:
+        - ipBlock: { cidr: "0.0.0.0/0" }
+      ports:
+        - { protocol: TCP, port: 554 }
+        - { protocol: TCP, port: 80 }
+        - { protocol: TCP, port: 443 }
+    - to:
+        - ipBlock: { cidr: "0.0.0.0/0" }
+    {{- end }}
+{{- end }}

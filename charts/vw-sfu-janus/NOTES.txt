@@ -1,0 +1,16 @@
+Token-gated signaling (Janus token_auth)
+
+- Janus is configured with `token_auth=true` (see `janus.jcfg`).
+- Janus checks the token before allowing Videoroom actions.
+
+Recommended control-plane flow:
+
+1) Operator requests a wall layout that includes WebRTC sources.
+2) mgmt-api evaluates ABAC/RBAC policies (source access) and if allowed,
+   mints a short-lived token for the specific Janus room/subscription.
+3) Tile player uses the Janus REST/WS API and includes the token (e.g. in
+   the `token` field of Janus messages, depending on client library).
+4) Janus validates the token and only then grants room join / subscription.
+
+Operational note:
+- In air-gapped LAN mode (ice_lite=true), no STUN/TURN is required.

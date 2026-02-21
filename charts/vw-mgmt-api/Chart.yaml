@@ -1,0 +1,6 @@
+apiVersion: v2
+name: vw-mgmt-api
+description: Stub chart placeholder (replace with real implementation)
+type: application
+version: 0.0.1
+appVersion: "0.0.1"

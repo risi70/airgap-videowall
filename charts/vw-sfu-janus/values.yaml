@@ -1,0 +1,44 @@
+replicaCount: 1
+
+image:
+  repository: janus-gateway/janus-gateway
+  tag: "1.2.4"
+  pullPolicy: IfNotPresent
+
+service:
+  type: LoadBalancer
+  metallbAddressPool: "default"
+  httpPort: 8088
+  wsPort: 8188
+  rtpPortStart: 20000
+  rtpPortEnd: 20200
+
+janus:
+  nat:
+    iceLiteEnabled: true
+  auth:
+    tokenAuthEnabled: true
+    existingSecret: "janus-token-secret"
+    tokenKey: "JANUS_TOKEN"
+  media:
+    maxNackQueue: 300
+    noMediaTimer: 5
+    slowlinkThreshold: 4
+
+videoroom:
+  defaultRoomId: 1234
+  private: true
+  maxPublishers: 64
+  bitrate: 8000000
+  videocodec: "h264"
+
+networkPolicy:
+  enabled: true
+  # allow ingress on 8088/8188 from mgmt-api and display zone pods (and optionally others)
+  fromMgmtApiSelector:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: vw-control
+    podSelector:
+      matchLabels:
+        app.kubernetes.io/name: vw-mgmt-api

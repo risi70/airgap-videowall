@@ -1,0 +1,19 @@
+global:
+  registry: ""
+  imagePullPolicy: IfNotPresent
+
+vw-sfu-janus: {}
+vw-gw: {}
+vw-compositor: {}
+
+# Stubs disabled by default; replace with real charts
+vw-mgmt-api:
+  enabled: false
+vw-policy:
+  enabled: false
+vw-audit:
+  enabled: false
+vw-obs:
+  enabled: false
+vw-postgres:
+  enabled: false

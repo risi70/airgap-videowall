@@ -1,0 +1,31 @@
+replicaCount: 1
+
+image:
+  repository: vw-gw
+  tag: "0.1.0"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8004
+
+resources: {}
+
+env:
+  # Restrict at runtime via NetworkPolicy to Source Zone IP ranges as needed.
+  VW_GW_LOG_TAIL_LINES: "200"
+
+networkPolicy:
+  enabled: true
+  # Allow ingress ONLY from mgmt-api by label selector (expected in vw-control)
+  fromMgmtApiSelector:
+    namespaceSelector:
+      matchLabels:
+        kubernetes.io/metadata.name: vw-control
+    podSelector:
+      matchLabels:
+        app.kubernetes.io/name: vw-mgmt-api
+  # Egress to Source Zone CIDRs (set per site). Example:
+  # toSourceCidrs:
+  #   - "10.10.0.0/16"
+  toSourceCidrs: []

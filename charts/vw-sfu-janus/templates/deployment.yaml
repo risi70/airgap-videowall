@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "vw-sfu-janus.fullname" . }}
+  labels:
+    app.kubernetes.io/name: {{ include "vw-sfu-janus.name" . }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "vw-sfu-janus.name" . }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "vw-sfu-janus.name" . }}
+    spec:
+      containers:
+        - name: janus
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: JANUS_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.janus.auth.existingSecret }}
+                  key: {{ .Values.janus.auth.tokenKey }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.httpPort }}
+            - name: ws
+              containerPort: {{ .Values.service.wsPort }}
+            - name: rtp
+              containerPort: {{ .Values.service.rtpPortStart }}
+              protocol: UDP
+          volumeMounts:
+            - name: janus-cfg
+              mountPath: /usr/local/etc/janus/janus.jcfg
+              subPath: janus.jcfg
+            - name: janus-cfg
+              mountPath: /usr/local/etc/janus/janus.transport.http.jcfg
+              subPath: janus.transport.http.jcfg
+            - name: janus-cfg
+              mountPath: /usr/local/etc/janus/janus.transport.websockets.jcfg
+              subPath: janus.transport.websockets.jcfg
+            - name: janus-cfg
+              mountPath: /usr/local/etc/janus/janus.plugin.videoroom.jcfg
+              subPath: janus.plugin.videoroom.jcfg
+          args:
+            - "/usr/local/bin/janus"
+            - "--disable-colors"
+            - "--full-trickle"
+          livenessProbe:
+            httpGet:
+              path: /janus/info
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /janus/info
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources: {}
+      volumes:
+        - name: janus-cfg
+          configMap:
+            name: {{ include "vw-sfu-janus.fullname" . }}-cfg

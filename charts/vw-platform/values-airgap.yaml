@@ -1,0 +1,21 @@
+global:
+  registry: "registry.local:5000"
+  imagePullPolicy: IfNotPresent
+
+vw-sfu-janus:
+  image:
+    repository: "registry.local:5000/janus-gateway/janus-gateway"
+    tag: "1.2.4"
+  imagePullPolicy: IfNotPresent
+
+vw-gw:
+  image:
+    repository: "registry.local:5000/vw-gw"
+    tag: "0.1.0"
+  imagePullPolicy: IfNotPresent
+
+vw-compositor:
+  image:
+    repository: "registry.local:5000/vw-compositor"
+    tag: "0.1.0"
+  imagePullPolicy: IfNotPresent

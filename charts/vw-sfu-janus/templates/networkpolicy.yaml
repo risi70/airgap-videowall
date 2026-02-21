@@ -1,0 +1,49 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "vw-sfu-janus.fullname" . }}-np
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "vw-sfu-janus.name" . }}
+  policyTypes: ["Ingress","Egress"]
+  ingress:
+    - from:
+        # mgmt-api signaling
+        - namespaceSelector:
+{{ toYaml .Values.networkPolicy.fromMgmtApiSelector.namespaceSelector | indent 12 }}
+          podSelector:
+{{ toYaml .Values.networkPolicy.fromMgmtApiSelector.podSelector | indent 12 }}
+        # allow clients (tile players / operators) in Display Zone
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: vw-display
+      ports:
+        - protocol: TCP
+          port: {{ .Values.service.httpPort }}
+        - protocol: TCP
+          port: {{ .Values.service.wsPort }}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: vw-display
+      ports:
+{{- $start := int .Values.service.rtpPortStart -}}
+{{- $end := int .Values.service.rtpPortEnd -}}
+{{- range $p := untilStep $start (add $end 1) 1 }}
+        - protocol: UDP
+          port: {{ $p }}
+{{- end }}
+  egress:
+    # Janus sends RTP/RTCP to clients; allow UDP range to anywhere in the cluster/lan.
+    - to:
+        - ipBlock: { cidr: "0.0.0.0/0" }
+      ports:
+{{- $start := int .Values.service.rtpPortStart -}}
+{{- $end := int .Values.service.rtpPortEnd -}}
+{{- range $p := untilStep $start (add $end 1) 1 }}
+        - protocol: UDP
+          port: {{ $p }}
+{{- end }}
+{{- end }}

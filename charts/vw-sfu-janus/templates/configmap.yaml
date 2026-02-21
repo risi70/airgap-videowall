@@ -1,0 +1,64 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "vw-sfu-janus.fullname" . }}-cfg
+data:
+  janus.jcfg: |
+    general: {
+      configs_folder = "/usr/local/etc/janus"
+      plugins_folder = "/usr/local/lib/janus/plugins"
+      transports_folder = "/usr/local/lib/janus/transports"
+      log_to_stdout = true
+    }
+
+    nat: {
+      ice_lite = {{ ternary "true" "false" .Values.janus.nat.iceLiteEnabled }}
+    }
+
+    # token auth is validated by Janus before allowing actions (room join/creation/etc).
+    # mgmt-api mints the token and distributes it to authorized tile players/operators.
+    auth: {
+      token_auth = {{ ternary "true" "false" .Values.janus.auth.tokenAuthEnabled }}
+    }
+
+    plugins: {
+      libjanus_videoroom.so = true
+      libjanus_streaming.so = true
+    }
+
+    transports: {
+      libjanus_http.so = true
+      libjanus_websockets.so = true
+    }
+
+  janus.transport.http.jcfg: |
+    http: {
+      http = true
+      port = {{ .Values.service.httpPort }}
+      https = false
+      cors = true
+      admin_http = false
+    }
+
+  janus.transport.websockets.jcfg: |
+    websockets: {
+      ws = true
+      ws_port = {{ .Values.service.wsPort }}
+      wss = false
+      admin_ws = false
+    }
+
+  janus.plugin.videoroom.jcfg: |
+    videoroom: {
+      events = true
+      rooms = [
+        {
+          room = {{ .Values.videoroom.defaultRoomId }}
+          description = "default private room"
+          is_private = {{ ternary "true" "false" .Values.videoroom.private }}
+          publishers = {{ .Values.videoroom.maxPublishers }}
+          bitrate = {{ .Values.videoroom.bitrate }}
+          videocodec = "{{ .Values.videoroom.videocodec }}"
+        }
+      ]
+    }

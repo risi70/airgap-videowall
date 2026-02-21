@@ -1,0 +1,49 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "vw-gw.fullname" . }}-np
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "vw-gw.name" . }}
+  policyTypes: ["Ingress","Egress"]
+  ingress:
+    - from:
+        - namespaceSelector:
+{{ toYaml .Values.networkPolicy.fromMgmtApiSelector.namespaceSelector | indent 12 }}
+          podSelector:
+{{ toYaml .Values.networkPolicy.fromMgmtApiSelector.podSelector | indent 12 }}
+      ports:
+        - protocol: TCP
+          port: 8004
+
+  egress:
+    {{- $cidrs := .Values.networkPolicy.toSourceCidrs }}
+    {{- if $cidrs }}
+    # TCP control / RTSP + optional HTTP(S)
+    - to:
+      {{- range $cidrs }}
+        - ipBlock: { cidr: {{ . | quote }} }
+      {{- end }}
+      ports:
+        - { protocol: TCP, port: 554 }
+        - { protocol: TCP, port: 80 }
+        - { protocol: TCP, port: 443 }
+    # UDP media (SRT/RTP etc) — allow all UDP ports to source CIDRs
+    - to:
+      {{- range $cidrs }}
+        - ipBlock: { cidr: {{ . | quote }} }
+      {{- end }}
+    {{- else }}
+    # If no CIDRs provided, allow egress anywhere (tighten in production!)
+    - to:
+        - ipBlock: { cidr: "0.0.0.0/0" }
+      ports:
+        - { protocol: TCP, port: 554 }
+        - { protocol: TCP, port: 80 }
+        - { protocol: TCP, port: 443 }
+    - to:
+        - ipBlock: { cidr: "0.0.0.0/0" }
+    {{- end }}
+{{- end }}
