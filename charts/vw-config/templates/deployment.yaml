@@ -20,8 +20,9 @@ spec:
         {{- if eq .Values.configSource "inline" }}
         checksum/config: {{ .Values.platformConfig | sha256sum }}
         {{- else }}
-        # External ConfigMap: use POST /api/v1/config/reload or
-        # set configPollInterval to detect projected-file changes.
+        # External ConfigMap — K8s projects updates with 30-60s delay (kubelet sync).
+        # vw-config polls at VW_CONFIG_POLL_INTERVAL to detect changes after projection.
+        # Use POST /api/v1/config/reload to force immediate reload.
         config-source: {{ printf "external:%s" .Values.existingConfigMap | quote }}
         {{- end }}
         {{- if .Values.vault.enabled }}

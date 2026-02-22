@@ -101,16 +101,6 @@ sources:
       mission: alpha
       origin: vdi
 
-  - id: vdi-03
-    type: webrtc
-    codec: h264
-    resolution: 1920x1080
-    bitrate_kbps: 6000
-    tags:
-      classification: secret
-      mission: bravo
-      origin: vdi
-
   # Add more VDI sources here as needed...
   # (In production: 20 VDI sources typical)
 

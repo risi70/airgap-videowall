@@ -68,6 +68,28 @@ Authority. No code changes are needed to add/remove walls or sources.
 | **Wall Controller** | Per-wall endpoint agent (Pi) — fetches tile config, manages player | vw-config API |
 | **Tile Player** | mpv kiosk on Pi — decodes single tile stream (DRM/KMS, hw decode) | Wall Controller |
 
+## vw-config Runtime Configuration
+
+The `vw-config` service reads its own behavior from environment variables and
+loads the platform configuration from a YAML file on disk.
+
+| Environment Variable | Default | Description |
+|---------------------|---------|-------------|
+| `VW_CONFIG_PATH` | `/etc/videowall/platform-config.yaml` | Path to the YAML config file (mounted from ConfigMap or bundle import) |
+| `VW_CONFIG_POLL_INTERVAL` | `5` | Seconds between file-change polls (SHA-256 of file bytes) |
+| `VW_CONFIG_EVENT_LOG` | `/var/lib/vw-config/events.jsonl` | Append-only JSONL log of `config_applied` / `config_rejected` events |
+
+In Kubernetes, the YAML is delivered via a ConfigMap mounted at `/etc/videowall/`.
+The file watcher polls for changes; when Kubernetes projects an updated ConfigMap
+(typically 30-60s propagation delay), the watcher detects the new SHA-256, validates
+the content against `config/schema.json`, and atomically swaps the active config.
+If validation fails, the previous config remains active (last-known-good) and
+`/healthz` exposes the error in the `last_error` field.
+
+To add or remove walls and sources, edit the `walls[]` or `sources[]` arrays in
+the YAML file (or Helm `values.yaml`), apply, and call `POST /api/v1/config/reload`
+or wait for the poll interval. No code changes or container restarts are required.
+
 ## vw-config API Endpoints
 
 | Method | Path | Description |
