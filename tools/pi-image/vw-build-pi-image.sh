@@ -44,13 +44,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # ──────────────────────────────────────────────────────────────────────────────
-# Defaults
+# Defaults (dev/lab only — override via CLI flags or wall manifest in production)
+# In production, wall_id and room_id come from the platform config via vw-config.
 # ──────────────────────────────────────────────────────────────────────────────
 TILE_ID=""
-WALL_ID="1"
+WALL_ID="${VW_WALL_ID:-1}"
 MGMT_API_URL="https://vw-mgmt-api:8000"
 SFU_URL="https://janus:8088"
-ROOM_ID="1234"
+ROOM_ID="${VW_ROOM_ID:-0}"
 CA_CERT=""
 CLIENT_CERT=""
 CLIENT_KEY=""
@@ -766,7 +767,7 @@ fetch_stream_url() {
   RESP=$(curl -sf $CURL_OPTS \
     -X POST "${VW_MGMT_API_URL}/api/v1/tokens/subscribe" \
     -H "Content-Type: application/json" \
-    -d "{\"wall_id\": ${VW_WALL_ID:-1}, \"source_id\": 1, \"tile_id\": \"${VW_TILE_ID}\"}" \
+    -d "{\"wall_id\": ${VW_WALL_ID:-1}, \"source_id\": ${VW_SOURCE_ID:-1}, \"tile_id\": \"${VW_TILE_ID}\"}" \
     2>/dev/null) || return 1
 
   TOKEN=$(echo "$RESP" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('token',''))" 2>/dev/null)

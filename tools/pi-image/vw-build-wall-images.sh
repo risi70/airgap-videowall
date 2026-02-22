@@ -20,7 +20,7 @@
 #
 #   mgmt_api_url: "https://vw-mgmt-api.videowall.svc:8000"
 #   sfu_url: "https://janus.videowall.svc:8088"
-#   room_id: 1234
+#   room_id: <allocated by SFU controller>
 #
 #   network:
 #     vlan_id: 30
@@ -106,7 +106,11 @@ HWDEC="$(val hwdec v4l2m2m)"
 IMAGE_SIZE="$(val image_size 2G)"
 MGMT_URL="$(val mgmt_api_url https://vw-mgmt-api:8000)"
 SFU_URL="$(val sfu_url https://janus:8088)"
-ROOM_ID="$(val room_id 1234)"
+ROOM_ID="$(val room_id "")"
+if [ -z "$ROOM_ID" ]; then
+  echo "ERROR: room_id is required in wall manifest (allocated by SFU controller from vw-config)." >&2
+  exit 1
+fi
 
 VLAN_ID="$(echo "$CONF" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('network',{}).get('vlan_id',''))")"
 GW="$(echo "$CONF" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('network',{}).get('gateway',''))")"

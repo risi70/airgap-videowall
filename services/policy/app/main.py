@@ -1,13 +1,31 @@
 from __future__ import annotations
 
+import json as _json
+import logging as _logging
+import os as _os
 import threading
+import urllib.request as _urllib_request
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 import yaml
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-POLICY_PATH = "/etc/vw-policy/policy.yaml"
+_LOG = _logging.getLogger("vw.policy")
+
+# Policy source priority:
+#   1. vw-config API  (VW_CONFIG_URL — single source of truth when running)
+#   2. Local file      (VW_POLICY_PATH — K8s mount or co-located fallback)
+_VW_CONFIG_URL = _os.environ.get("VW_CONFIG_URL", "http://vw-config:8006")
+_VW_CONFIG_TIMEOUT = float(_os.environ.get("VW_CONFIG_TIMEOUT", "2"))
+
+# Local file search order: explicit env → K8s mount → co-located in repo
+_POLICY_FILE_CANDIDATES = [
+    _os.environ.get("VW_POLICY_PATH", ""),
+    "/etc/vw-policy/policy.yaml",
+    str(Path(__file__).parent.parent / "policy.yaml"),
+]
 
 
 class EvalRequest(BaseModel):
@@ -24,20 +42,65 @@ class EvalResponse(BaseModel):
     matched_rules: list[dict[str, Any]] = Field(default_factory=list)
 
 
+def _fetch_policy_from_vw_config() -> dict[str, Any] | None:
+    """Try to fetch policy rules from vw-config API. Returns None on failure."""
+    try:
+        url = f"{_VW_CONFIG_URL}/api/v1/policy"
+        req = _urllib_request.Request(url, method="GET")
+        with _urllib_request.urlopen(req, timeout=_VW_CONFIG_TIMEOUT) as resp:
+            data = _json.loads(resp.read())
+        if isinstance(data, dict) and "rules" in data:
+            _LOG.info("Policy loaded from vw-config API (%d rules)", len(data.get("rules", [])))
+            return data
+    except Exception as exc:
+        _LOG.debug("vw-config API unavailable (%s); will try local file", exc)
+    return None
+
+
+def _resolve_policy_path() -> str | None:
+    """Find the first existing policy file from the candidate list."""
+    for p in _POLICY_FILE_CANDIDATES:
+        if p and Path(p).is_file():
+            return p
+    return None
+
+
 class PolicyEngine:
-    def __init__(self, path: str = POLICY_PATH):
-        self.path = path
+    def __init__(self, path: str | None = None):
+        self.path = path or _resolve_policy_path()
         self._lock = threading.RLock()
         self._policy: dict[str, Any] = {}
+        self._source: str = "none"
         self.reload()
 
     def reload(self) -> None:
         with self._lock:
-            with open(self.path, "rb") as f:
-                doc = yaml.safe_load(f.read().decode("utf-8")) or {}
-            if not isinstance(doc, dict):
-                raise ValueError("policy_document_must_be_mapping")
-            self._policy = doc
+            # Primary: try vw-config API (single source of truth for policy rules)
+            vw_policy = _fetch_policy_from_vw_config()
+            if vw_policy is not None:
+                self._policy = vw_policy
+                self._source = "vw-config"
+                return
+
+            # Fallback: local policy file (for bootstrap or when vw-config is down)
+            path = self.path or _resolve_policy_path()
+            if path:
+                try:
+                    with open(path, "rb") as f:
+                        doc = yaml.safe_load(f.read().decode("utf-8")) or {}
+                    if not isinstance(doc, dict):
+                        raise ValueError("policy_document_must_be_mapping")
+                    self._policy = doc
+                    self._source = f"file:{path}"
+                    _LOG.info("Policy loaded from local file: %s", path)
+                    return
+                except Exception as exc:
+                    _LOG.warning("Failed to load policy file %s: %s", path, exc)
+
+            # Last resort: deny-all
+            _LOG.warning("No policy source available; using default-deny")
+            self._policy = {"rules": [{"id": "default-deny", "effect": "deny", "when": [{"always": True}]}]}
+            self._source = "empty-default"
 
     def policy(self) -> dict[str, Any]:
         with self._lock:
@@ -149,9 +212,6 @@ def _coerce_tags(v: Any) -> list[str]:
 # Tag lookup: fetch wall and source tags from mgmt-api for policy evaluation.
 # Falls back to empty tags if the API is unreachable (fail-open on enrichment,
 # fail-closed on policy decision).
-
-import os as _os
-import urllib.request as _urllib_request
 
 _MGMT_API_URL = _os.environ.get("VW_MGMT_API_URL", "http://vw-mgmt-api:8000")
 

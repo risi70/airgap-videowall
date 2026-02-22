@@ -13,6 +13,7 @@ image_size: 2G
 
 mgmt_api_url: "https://vw-mgmt-api.videowall.svc:8000"
 sfu_url: "https://janus.videowall.svc:8088"
+# Room ID allocated by SFU controller based on vw-config wall definitions.
 room_id: 5678
 
 network:

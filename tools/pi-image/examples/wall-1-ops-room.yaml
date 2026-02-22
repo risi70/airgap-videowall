@@ -14,6 +14,8 @@ image_size: 2G
 # ── Control plane endpoints ──
 mgmt_api_url: "https://vw-mgmt-api.videowall.svc:8000"
 sfu_url: "https://janus.videowall.svc:8088"
+# Room ID allocated by SFU controller based on vw-config wall definitions.
+# In production, query: GET vw-config:8006/api/v1/derived → sfu_rooms_needed
 room_id: 1234
 
 # ── Network ──
