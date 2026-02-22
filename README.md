@@ -20,7 +20,36 @@ An **air-gapped, open-source multi-videowall platform** for high-security enclav
 
 ## Dynamic Configuration
 
-Wall counts, source definitions, codec policies, and ABAC rules are **declaratively configured via YAML** — no code changes needed to scale. Edit `config/examples/platform-config.yaml`, validate with `POST /api/v1/config/dry-run`, and apply. The `vw-config` Configuration Authority validates, watches, and distributes config to all services.
+Wall counts, source definitions, codec policies, and ABAC rules are **declaratively configured via YAML** — no code changes needed to scale. The `vw-config` Configuration Authority validates, watches, and distributes config to all services.
+
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `VW_CONFIG_PATH` | `/etc/videowall/platform-config.yaml` | YAML config file path |
+| `VW_CONFIG_POLL_INTERVAL` | `5` | Seconds between file change checks |
+| `VW_CONFIG_EVENT_LOG` | `/var/lib/vw-config/events.jsonl` | Append-only JSONL event log path |
+
+### API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/healthz` | Health check — returns `active_hash`, `last_reload_ts`, and `last_error` if any |
+| `GET` | `/api/v1/config` | Active config as canonical JSON + `X-Config-Hash` header |
+| `GET` | `/api/v1/config/raw` | YAML as stored on disk + `X-Config-Hash` header |
+| `GET` | `/api/v1/config/version` | Config version, hash, `loaded_from`, `loaded_at` |
+| `POST` | `/api/v1/config/dry-run` | Validate supplied YAML body; returns derived metrics + `predicted_hash` (does not apply) |
+| `POST` | `/api/v1/config/reload` | Force reload from disk; returns `reloaded: true/false` |
+| `GET` | `/api/v1/derived` | Derived metrics (walls, tiles, sources by type, worst-case concurrency, bandwidth estimate) |
+| `GET` | `/api/v1/walls` | Wall list from active config |
+| `GET` | `/api/v1/walls/{wall_id}` | Single wall by ID |
+| `GET` | `/api/v1/sources` | Source list from active config |
+| `GET` | `/api/v1/sources/{source_id}` | Single source by ID |
+| `GET` | `/api/v1/policy` | Policy rules + taxonomy from active config |
+
+### Last-Known-Good Semantics
+
+If a config reload fails (invalid YAML, schema violation, concurrency exceeded), the service continues serving the previous valid config. The error is exposed via `/healthz` in the `last_error` field and logged to the JSONL event log as `config_rejected`.
 
 See [`docs/architecture.md`](docs/architecture.md) for the full dynamic configuration model, hot-reload strategy, and config lifecycle.
 

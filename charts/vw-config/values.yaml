@@ -109,6 +109,4 @@ resources:
     cpu: "100m"
     memory: "128Mi"
 
-podSecurityContext:
-  runAsNonRoot: true
-  runAsUser: 1000
+controlPlaneNamespace: "vw-control"   # Namespace for NetworkPolicy ingress allow

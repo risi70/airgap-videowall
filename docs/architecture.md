@@ -68,6 +68,39 @@ Authority. No code changes are needed to add/remove walls or sources.
 | **Wall Controller** | Per-wall endpoint agent (Pi) — fetches tile config, manages player | vw-config API |
 | **Tile Player** | mpv kiosk on Pi — decodes single tile stream (DRM/KMS, hw decode) | Wall Controller |
 
+## vw-config API Endpoints
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/healthz` | Status, `active_hash`, `last_reload_ts`, `last_error` |
+| `GET` | `/api/v1/config` | Canonical JSON (sorted keys, stable hash) + `X-Config-Hash` header |
+| `GET` | `/api/v1/config/raw` | YAML as stored on disk |
+| `GET` | `/api/v1/config/version` | Config version + hash + load metadata |
+| `POST` | `/api/v1/config/dry-run` | Validate YAML body → derived metrics + `predicted_hash` (no apply) |
+| `POST` | `/api/v1/config/reload` | Force reload from disk |
+| `GET` | `/api/v1/derived` | Computed metrics: tiles, SFU rooms, bandwidth, concurrency |
+| `GET` | `/api/v1/walls[/{id}]` | Wall definitions from config |
+| `GET` | `/api/v1/sources[/{id}]` | Source definitions from config |
+| `GET` | `/api/v1/policy` | Policy rules + taxonomy |
+
+### Last-Known-Good State
+
+If the config file becomes invalid (bad YAML, schema failure, concurrency exceeded, duplicate IDs), the service **keeps serving the previous valid config**. The error is:
+
+- Returned in `/healthz` as `last_error`
+- Logged to the append-only JSONL event log (`/var/lib/vw-config/events.jsonl`) as `config_rejected`
+- Not propagated to consumers — they continue using the last good config
+
+On next successful reload, `last_error` is cleared and `config_applied` is logged.
+
+### Canonical JSON + Config Hash
+
+The config is canonicalized (sorted keys, no whitespace) to produce a deterministic SHA-256 hash. This hash is used for:
+
+- Change detection (file watcher compares hashes)
+- Audit trail (config_applied/config_rejected events include old + new hashes)
+- API consumers (X-Config-Hash header, /healthz active_hash)
+
 ## Hot Reload Strategy
 
 | Component | Reload Method | Restart Required? |

@@ -1,0 +1,20 @@
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: vw-config-allow
+  labels:
+    app.kubernetes.io/name: vw-config
+spec:
+  podSelector:
+    matchLabels:
+      app: vw-config
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.controlPlaneNamespace | default "vw-control" }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.service.port }}

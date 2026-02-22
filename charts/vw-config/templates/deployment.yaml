@@ -2,13 +2,10 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: vw-config
-  labels:
+  labels: &labels
     app: vw-config
     app.kubernetes.io/name: vw-config
     app.kubernetes.io/part-of: videowall
-  annotations:
-    # Trigger rollout when ConfigMap content changes
-    checksum/config: {{ .Values.platformConfig | sha256sum }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
@@ -20,30 +17,53 @@ spec:
         app: vw-config
         app.kubernetes.io/name: vw-config
       annotations:
+        {{- if eq .Values.configSource "inline" }}
         checksum/config: {{ .Values.platformConfig | sha256sum }}
+        {{- else }}
+        # External ConfigMap: use POST /api/v1/config/reload or
+        # set configPollInterval to detect projected-file changes.
+        config-source: {{ printf "external:%s" .Values.existingConfigMap | quote }}
+        {{- end }}
         {{- if .Values.vault.enabled }}
         vault.hashicorp.com/agent-inject: "true"
-        vault.hashicorp.com/agent-inject-secret-tls.crt: "{{ .Values.vault.pkiPath }}"
-        vault.hashicorp.com/role: "{{ .Values.vault.role | default "config" }}"
+        vault.hashicorp.com/agent-inject-secret-tls.crt: {{ .Values.vault.pkiPath | quote }}
+        vault.hashicorp.com/role: {{ .Values.vault.role | default "config" | quote }}
         {{- end }}
     spec:
+      serviceAccountName: vw-config
       securityContext:
-{{ toYaml .Values.podSecurityContext | indent 8 }}
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
       containers:
         - name: vw-config
-          image: "{{ .Values.global.registry }}/{{ .Values.image.repository }}:{{ .Values.global.imageTag }}"
-          imagePullPolicy: "{{ .Values.global.imagePullPolicy }}"
+          image: {{ printf "%s/%s:%s" .Values.global.registry .Values.image.repository .Values.global.imageTag | quote }}
+          imagePullPolicy: {{ .Values.global.imagePullPolicy | quote }}
           ports:
             - containerPort: {{ .Values.service.port }}
+              name: http
+              protocol: TCP
           env:
             - name: VW_CONFIG_PATH
-              value: "/etc/videowall/platform-config.yaml"
+              value: /etc/videowall/platform-config.yaml
             - name: VW_CONFIG_POLL_INTERVAL
-              value: "{{ .Values.configPollInterval }}"
+              value: {{ .Values.configPollInterval | quote }}
+            - name: VW_CONFIG_EVENT_LOG
+              value: /var/lib/vw-config/events.jsonl
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
           volumeMounts:
             - name: config-volume
               mountPath: /etc/videowall
               readOnly: true
+            - name: data
+              mountPath: /var/lib/vw-config
+            - name: tmp
+              mountPath: /tmp
           resources:
 {{ toYaml .Values.resources | indent 12 }}
           livenessProbe:
@@ -64,5 +84,10 @@ spec:
             {{- if eq .Values.configSource "inline" }}
             name: vw-platform-config
             {{- else }}
-            name: {{ .Values.existingConfigMap }}
+            name: {{ required "existingConfigMap required when configSource=configmap" .Values.existingConfigMap }}
             {{- end }}
+        - name: data
+          emptyDir: {}
+        - name: tmp
+          emptyDir:
+            sizeLimit: 10Mi

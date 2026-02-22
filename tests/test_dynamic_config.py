@@ -18,7 +18,7 @@ from pathlib import Path
 # Adjust import path
 import sys
 sys.path.insert(0, str(Path(__file__).parent.parent / "services" / "vw-config"))
-from app.config_authority import load_config, dry_run, validate_config
+from app.config_authority import load_config, dry_run, validate_schema, ConfigError
 
 
 CONFIG_1WALL = """
@@ -180,7 +180,7 @@ walls:
     grid: { rows: 4, cols: 4 }
 sources: []
 """
-        with pytest.raises(ValueError, match="Concurrency exceeded"):
+        with pytest.raises((ValueError, ConfigError), match="Concurrency"):
             load_config(bad)
 
     def test_duplicate_ids_rejected(self):
@@ -196,7 +196,7 @@ walls:
     grid: { rows: 2, cols: 2 }
 sources: []
 """
-        with pytest.raises(ValueError, match="Duplicate"):
+        with pytest.raises((ValueError, ConfigError), match="Duplicate"):
             load_config(bad)
 
     def test_dry_run_returns_metrics(self):
