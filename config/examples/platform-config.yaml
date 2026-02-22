@@ -1,86 +1,64 @@
 # SPDX-License-Identifier: EUPL-1.2
-# ──────────────────────────────────────────────────────────────────────────────
 # Videowall Platform Configuration
-#
-# This file declaratively defines all walls, sources, codec policies,
-# concurrency limits, and ABAC rules. No code changes are required
-# to add/remove walls or sources — edit this file and reload.
-#
 # Validated against: config/schema.json
 # Delivered via: Kubernetes ConfigMap or signed offline bundle
-# ──────────────────────────────────────────────────────────────────────────────
 
 platform:
   version: "1.0.0"
   max_concurrent_streams: 64
   codec_policy:
-    tiles: h264          # Widest decode support (all Pi models)
-    mosaics: hevc        # Better quality/bitrate for 4K compositor output
+    tiles: h264
+    mosaics: hevc
   latency_classes:
-    interactive_max_ms: 500    # WebRTC SFU path
-    broadcast_max_ms: 6000     # SRT/compositor path
+    interactive_max_ms: 500
+    broadcast_max_ms: 6000
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Walls — add/remove entries to scale; no code change needed
-# ──────────────────────────────────────────────────────────────────────────────
 walls:
-  # Multi-tile wall (24 tiles, 6×4 grid, 1080p per tile)
   - id: wall-alpha
     type: tiles
     classification: confidential
+    latency_class: interactive
     grid:
       rows: 6
       cols: 4
     resolution: 1920x1080
-    latency_class: interactive
     tags:
       mission: alpha
       room: ops-center
-      audience: operators
 
-  # Second multi-tile wall
   - id: wall-bravo
     type: tiles
     classification: secret
+    latency_class: interactive
     grid:
       rows: 6
       cols: 4
     resolution: 1920x1080
-    latency_class: interactive
     tags:
       mission: bravo
       room: intel-center
-      audience: analysts
 
-  # Dual 4K big-screen wall (compositor-driven)
   - id: wall-charlie
     type: bigscreen
     classification: confidential
+    latency_class: broadcast
     screens: 2
     resolution: 3840x2160
-    latency_class: broadcast
     tags:
       mission: alpha
       room: exec-briefing
-      audience: leadership
 
-  # Second big-screen
   - id: wall-delta
     type: bigscreen
     classification: unclassified
+    latency_class: broadcast
     screens: 2
     resolution: 3840x2160
-    latency_class: broadcast
     tags:
       mission: training
       room: training-center
-      audience: all
 
-# ──────────────────────────────────────────────────────────────────────────────
-# Sources — add/remove entries to scale; gateway auto-spawns ingest workers
-# ──────────────────────────────────────────────────────────────────────────────
 sources:
-  # VDI WebRTC sources (soft-encoders on VMs)
   - id: vdi-01
     type: webrtc
     codec: h264
@@ -89,7 +67,6 @@ sources:
     tags:
       classification: confidential
       mission: alpha
-      origin: vdi
 
   - id: vdi-02
     type: webrtc
@@ -99,33 +76,24 @@ sources:
     tags:
       classification: confidential
       mission: alpha
-      origin: vdi
 
-  # Add more VDI sources here as needed...
-  # (In production: 20 VDI sources typical)
-
-  # HDMI encoder sources (hardware SRT/RTSP)
   - id: hdmi-01
     type: srt
     endpoint: "srt://10.10.10.20:9000"
     codec: h264
-    resolution: 1920x1080
     bitrate_kbps: 8000
     tags:
       classification: confidential
       mission: alpha
-      origin: hdmi
 
   - id: hdmi-02
     type: rtsp
     endpoint: "rtsp://10.10.10.21:554/stream1"
     codec: h264
-    resolution: 1920x1080
     bitrate_kbps: 8000
     tags:
       classification: restricted
       mission: bravo
-      origin: hdmi
 
   - id: hdmi-03
     type: srt
@@ -136,46 +104,23 @@ sources:
     tags:
       classification: unclassified
       mission: training
-      origin: hdmi
 
-  # Add more HDMI sources here as needed...
-  # (In production: 8 HDMI sources typical)
-
-# ──────────────────────────────────────────────────────────────────────────────
-# Policy — ABAC rules evaluated against wall/source/operator tags
-# ──────────────────────────────────────────────────────────────────────────────
 policy:
   taxonomy:
     classifications: ["unclassified", "restricted", "confidential", "secret"]
     missions: ["alpha", "bravo", "training"]
-    origins: ["vdi", "hdmi"]
 
   rules:
     - id: rule-clearance-match
       effect: allow
-      description: >
-        Operator clearance tags must be a superset of source classification tags.
-        Enforces need-to-know: operators only see sources at or below their clearance.
+      description: "Operator clearance tags must be a superset of source classification tags."
       when:
         source_tags_subset_of_operator_tags: true
 
-    - id: rule-mission-match
-      effect: allow
-      description: >
-        Wall and source must share at least one mission tag.
-        Prevents cross-mission data leakage.
-      when:
-        source_tags_intersect_wall_tags: true
-        match_key: mission
-
     - id: rule-default-deny
       effect: deny
-      description: "Default deny — no rule matched"
+      description: "Default deny — no rule matched."
       when:
         always: true
 
   allow_list: []
-  # Explicit overrides:
-  # - operator_id: "admin-alice"
-  #   wall_id: "wall-alpha"
-  #   source_id: "vdi-01"

@@ -43,66 +43,92 @@ platformConfig: |
     - id: wall-alpha
       type: tiles
       classification: confidential
-      grid: { rows: 6, cols: 4 }
-      resolution: 1920x1080
       latency_class: interactive
-      tags: { mission: alpha, room: ops-center }
+      grid:
+        rows: 6
+        cols: 4
+      resolution: 1920x1080
+      tags:
+        mission: alpha
+        room: ops-center
 
     - id: wall-bravo
       type: tiles
       classification: secret
-      grid: { rows: 6, cols: 4 }
-      resolution: 1920x1080
       latency_class: interactive
-      tags: { mission: bravo, room: intel-center }
+      grid:
+        rows: 6
+        cols: 4
+      resolution: 1920x1080
+      tags:
+        mission: bravo
+        room: intel-center
 
     - id: wall-charlie
       type: bigscreen
       classification: confidential
+      latency_class: broadcast
       screens: 2
       resolution: 3840x2160
-      latency_class: broadcast
-      tags: { mission: alpha, room: exec-briefing }
+      tags:
+        mission: alpha
+        room: exec-briefing
 
     - id: wall-delta
       type: bigscreen
       classification: unclassified
+      latency_class: broadcast
       screens: 2
       resolution: 3840x2160
-      latency_class: broadcast
-      tags: { mission: training, room: training-center }
+      tags:
+        mission: training
+        room: training-center
 
   sources:
     - id: vdi-01
       type: webrtc
       codec: h264
       bitrate_kbps: 6000
-      tags: { classification: confidential, mission: alpha, origin: vdi }
+      tags:
+        classification: confidential
+        mission: alpha
+
     - id: vdi-02
       type: webrtc
       codec: h264
       bitrate_kbps: 6000
-      tags: { classification: confidential, mission: alpha, origin: vdi }
+      tags:
+        classification: confidential
+        mission: alpha
+
     - id: hdmi-01
       type: srt
       endpoint: "srt://10.10.10.20:9000"
       bitrate_kbps: 8000
-      tags: { classification: confidential, mission: alpha, origin: hdmi }
+      tags:
+        classification: confidential
+        mission: alpha
 
   policy:
     taxonomy:
-      classifications: ["unclassified", "restricted", "confidential", "secret"]
-      missions: ["alpha", "bravo", "training"]
+      classifications:
+        - unclassified
+        - restricted
+        - confidential
+        - secret
+      missions:
+        - alpha
+        - bravo
+        - training
     rules:
       - id: rule-clearance
         effect: allow
-        when: { source_tags_subset_of_operator_tags: true }
-      - id: rule-mission-match
-        effect: allow
-        when: { source_tags_intersect_wall_tags: true, match_key: mission }
+        when:
+          source_tags_subset_of_operator_tags: true
       - id: rule-default-deny
         effect: deny
-        when: { always: true }
+        when:
+          always: true
 
 resources:
   requests:
