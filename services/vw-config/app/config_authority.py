@@ -46,7 +46,11 @@ def _load_schema() -> dict:
     ]
     for p in paths:
         if p.exists():
-            return json.loads(p.read_text())
+            try:
+                return json.loads(p.read_text())
+            except (json.JSONDecodeError, OSError) as exc:
+                LOG.error("Schema file %s is corrupt: %s", p, exc)
+                return {}
     LOG.warning("JSONSchema not found; schema validation will be skipped")
     return {}
 

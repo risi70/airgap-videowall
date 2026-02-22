@@ -17,6 +17,12 @@ from app.config_authority import (
 )
 
 
+# ── Fixtures ──────────────────────────────────────────────────────────────
+# All fixtures must satisfy the stricter schema:
+#   platform: version + max_concurrent_streams required
+#   walls: id + type + classification + latency_class required
+#   sources: id + type + tags (with classification) required
+
 VALID_MINIMAL = """
 platform:
   version: "1.0.0"
@@ -24,10 +30,13 @@ platform:
 walls:
   - id: wall-a
     type: tiles
+    classification: unclassified
+    latency_class: interactive
     grid: { rows: 2, cols: 2 }
 sources:
   - id: src-1
     type: webrtc
+    tags: { classification: unclassified }
 """
 
 VALID_FULL = """
@@ -114,16 +123,96 @@ class TestLoadConfig:
 
 class TestSchemaValidation:
     def test_tiles_without_grid_rejected(self):
+        bad = """
+platform: { version: "1.0.0", max_concurrent_streams: 64 }
+walls:
+  - { id: w, type: tiles, classification: unclassified, latency_class: interactive }
+sources: []
+"""
         with pytest.raises(ConfigError, match="grid"):
-            load_config("platform: {version: '1.0.0'}\nwalls:\n  - {id: w, type: tiles}\nsources: []")
+            load_config(bad)
 
     def test_bigscreen_without_screens_rejected(self):
+        bad = """
+platform: { version: "1.0.0", max_concurrent_streams: 64 }
+walls:
+  - { id: w, type: bigscreen, classification: unclassified, latency_class: broadcast }
+sources: []
+"""
         with pytest.raises(ConfigError, match="screens"):
-            load_config("platform: {version: '1.0.0'}\nwalls:\n  - {id: w, type: bigscreen}\nsources: []")
+            load_config(bad)
 
     def test_bad_version_format(self):
         with pytest.raises(ConfigError):
-            load_config("platform: {version: nope}\nwalls: []\nsources: []")
+            load_config("platform: {version: nope, max_concurrent_streams: 64}\nwalls: []\nsources: []")
+
+    def test_missing_max_concurrent_streams(self):
+        """Spec requirement: platform.max_concurrent_streams is required."""
+        with pytest.raises(ConfigError, match="max_concurrent_streams"):
+            load_config("platform: {version: '1.0.0'}\nwalls: []\nsources: []")
+
+    def test_missing_wall_classification(self):
+        """Spec requirement: wall classification is required."""
+        bad = """
+platform: { version: "1.0.0", max_concurrent_streams: 64 }
+walls:
+  - { id: w, type: tiles, latency_class: interactive, grid: { rows: 1, cols: 1 } }
+sources: []
+"""
+        with pytest.raises(ConfigError, match="classification"):
+            load_config(bad)
+
+    def test_missing_source_tags_classification(self):
+        """Spec requirement: sources require tags.classification."""
+        bad = """
+platform: { version: "1.0.0", max_concurrent_streams: 64 }
+walls: []
+sources:
+  - { id: s, type: webrtc, tags: { mission: alpha } }
+"""
+        with pytest.raises(ConfigError, match="classification"):
+            load_config(bad)
+
+    def test_srt_source_requires_endpoint(self):
+        """Spec requirement: srt/rtsp/rtp sources require endpoint."""
+        bad = """
+platform: { version: "1.0.0", max_concurrent_streams: 64 }
+walls: []
+sources:
+  - { id: s, type: srt, tags: { classification: unclassified } }
+"""
+        with pytest.raises(ConfigError, match="endpoint"):
+            load_config(bad)
+
+    def test_rtsp_source_requires_endpoint(self):
+        bad = """
+platform: { version: "1.0.0", max_concurrent_streams: 64 }
+walls: []
+sources:
+  - { id: s, type: rtsp, tags: { classification: unclassified } }
+"""
+        with pytest.raises(ConfigError, match="endpoint"):
+            load_config(bad)
+
+    def test_webrtc_source_no_endpoint_ok(self):
+        """webrtc sources do not require endpoint."""
+        cfg = load_config("""
+platform: { version: "1.0.0", max_concurrent_streams: 64 }
+walls: []
+sources:
+  - { id: s, type: webrtc, tags: { classification: unclassified } }
+""")
+        assert cfg.derived.total_sources == 1
+
+    def test_invalid_classification_enum(self):
+        bad = """
+platform: { version: "1.0.0", max_concurrent_streams: 64 }
+walls:
+  - { id: w, type: tiles, classification: bogus, latency_class: interactive, grid: { rows: 1, cols: 1 } }
+sources: []
+"""
+        with pytest.raises(ConfigError):
+            load_config(bad)
 
 
 # ── Unit: semantic rejection ──────────────────────────────────────────────
@@ -132,21 +221,21 @@ class TestSemanticValidation:
     def test_duplicate_wall_ids(self):
         with pytest.raises(ConfigError, match="Duplicate wall"):
             load_config("""
-platform: { version: "1.0.0" }
+platform: { version: "1.0.0", max_concurrent_streams: 64 }
 walls:
-  - { id: dup, type: tiles, grid: { rows: 1, cols: 1 } }
-  - { id: dup, type: tiles, grid: { rows: 1, cols: 1 } }
+  - { id: dup, type: tiles, classification: unclassified, latency_class: interactive, grid: { rows: 1, cols: 1 } }
+  - { id: dup, type: tiles, classification: unclassified, latency_class: interactive, grid: { rows: 1, cols: 1 } }
 sources: []
 """)
 
     def test_duplicate_source_ids(self):
         with pytest.raises(ConfigError, match="Duplicate source"):
             load_config("""
-platform: { version: "1.0.0" }
+platform: { version: "1.0.0", max_concurrent_streams: 64 }
 walls: []
 sources:
-  - { id: dup, type: webrtc }
-  - { id: dup, type: srt }
+  - { id: dup, type: webrtc, tags: { classification: unclassified } }
+  - { id: dup, type: webrtc, tags: { classification: unclassified } }
 """)
 
     def test_concurrency_exceeded(self):
@@ -154,7 +243,7 @@ sources:
             load_config("""
 platform: { version: "1.0.0", max_concurrent_streams: 5 }
 walls:
-  - { id: big, type: tiles, grid: { rows: 3, cols: 3 } }
+  - { id: big, type: tiles, classification: unclassified, latency_class: interactive, grid: { rows: 3, cols: 3 } }
 sources: []
 """)
 
@@ -205,7 +294,7 @@ class TestDryRun:
         r = dry_run("""
 platform: { version: "1.0.0", max_concurrent_streams: 2 }
 walls:
-  - { id: w, type: tiles, grid: { rows: 3, cols: 3 } }
+  - { id: w, type: tiles, classification: unclassified, latency_class: interactive, grid: { rows: 3, cols: 3 } }
 sources: []
 """)
         assert r["valid"] is False
@@ -241,6 +330,21 @@ class TestWatcher:
         assert w.current.derived.config_hash != orig_hash
         assert w.last_error is None
 
+    def test_schema_reject_keeps_lkg(self, tmp_path):
+        """Overwrite with YAML missing required max_concurrent_streams → LKG preserved."""
+        f = tmp_path / "c.yaml"
+        f.write_text(VALID_MINIMAL)
+        w = ConfigWatcher(f, poll_interval=0.1)
+        w.load_initial()
+        orig_hash = w.current.derived.config_hash
+
+        f.write_text("platform: { version: '1.0.0' }\nwalls: []\nsources: []")
+        result = w.force_reload()
+        assert result is None
+        assert w.current.derived.config_hash == orig_hash
+        assert w.last_error is not None
+        assert "max_concurrent_streams" in w.last_error
+
 
 # ── API: endpoint tests ──────────────────────────────────────────────────
 
@@ -251,12 +355,11 @@ class TestApiEndpoints:
         cfg_file.write_text(VALID_FULL)
         os.environ["VW_CONFIG_PATH"] = str(cfg_file)
         os.environ["VW_CONFIG_EVENT_LOG"] = str(tmp_path / "events.jsonl")
-        os.environ["VW_CONFIG_POLL_INTERVAL"] = "999"  # disable poll during tests
+        os.environ["VW_CONFIG_POLL_INTERVAL"] = "999"
 
         import importlib
         from app import main as m
         importlib.reload(m)
-        # Direct init — no background thread for test determinism
         m._watcher = ConfigWatcher(cfg_file, poll_interval=999)
         m._watcher.load_initial()
 
@@ -360,7 +463,7 @@ class TestApiEndpoints:
         c.post("/api/v1/config/reload")
 
         h2 = c.get("/api/v1/config/version").json()["config_hash"]
-        assert h1 == h2  # kept last known good
+        assert h1 == h2
 
         health = c.get("/healthz").json()
         assert "last_error" in health

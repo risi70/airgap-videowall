@@ -74,6 +74,7 @@ walls:
 
   - id: wall-charlie
     type: bigscreen
+    classification: confidential
     screens: 2
     resolution: 3840x2160
     latency_class: broadcast
@@ -81,6 +82,7 @@ walls:
 
   - id: wall-delta
     type: bigscreen
+    classification: unclassified
     screens: 2
     resolution: 3840x2160
     latency_class: broadcast
@@ -177,6 +179,8 @@ platform:
 walls:
   - id: wall-big
     type: tiles
+    classification: unclassified
+    latency_class: interactive
     grid: { rows: 4, cols: 4 }
 sources: []
 """
@@ -187,12 +191,17 @@ sources: []
         bad = """
 platform:
   version: "1.0.0"
+  max_concurrent_streams: 64
 walls:
   - id: wall-x
     type: tiles
+    classification: unclassified
+    latency_class: interactive
     grid: { rows: 2, cols: 2 }
   - id: wall-x
     type: tiles
+    classification: unclassified
+    latency_class: interactive
     grid: { rows: 2, cols: 2 }
 sources: []
 """

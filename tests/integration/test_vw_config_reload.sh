@@ -43,10 +43,13 @@ platform:
 walls:
   - id: wall-x
     type: tiles
+    classification: unclassified
+    latency_class: interactive
     grid: { rows: 3, cols: 3 }
 sources:
   - id: src-x
     type: webrtc
+    tags: { classification: unclassified }
 YAML
 
 CFG_B=$(cat << 'YAML'
@@ -56,15 +59,22 @@ platform:
 walls:
   - id: wall-x
     type: tiles
+    classification: unclassified
+    latency_class: interactive
     grid: { rows: 6, cols: 4 }
   - id: wall-y
     type: bigscreen
+    classification: unclassified
+    latency_class: broadcast
     screens: 2
 sources:
   - id: src-x
     type: webrtc
+    tags: { classification: unclassified }
   - id: src-y
     type: srt
+    endpoint: "srt://10.0.0.1:9000"
+    tags: { classification: unclassified }
 YAML
 )
 
