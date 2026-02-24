@@ -108,11 +108,13 @@ docs/             ✅ architecture.md, security.md, sizing.md, ports-allowlist.m
 
 ## 3. Critical Bugs Found
 
-| File | Bug | Impact |
+All three critical bugs have been **resolved**:
+
+| File | Bug | Status |
 |------|-----|--------|
-| `tools/bundlectl/bundlectl.py` | `import re` missing; `load_key()` calls `re.fullmatch()` | **Crash** on key loading — bundlectl unusable |
-| `agents/wallctl/vw_wallctl.py` | `import shutil` missing; `_show_slate()` calls `shutil.which()` | **Crash** on safe-slate display |
-| `services/compositor/app/policy.py` | Policy call sends `{source_id, action}` but policy service expects `{wall_id, source_id, operator_id, operator_roles}` | Policy always **default-denies** compositor inputs |
+| `tools/bundlectl/bundlectl.py` | `import re` was missing | ✅ Fixed — `re`, `shutil`, `subprocess` imported (lines 11–13). Verified by 6 automated tests (3 Ed25519 + 3 HMAC). |
+| `agents/wallctl/vw_wallctl.py` | `import shutil` was missing | ✅ Fixed — `shutil` imported (line 9). `shutil.which("fbi")` call in `_show_slate()` verified. |
+| `services/compositor/app/policy.py` | Policy call sent `{source_id, action}` but policy service expected `{wall_id, source_id, operator_id, operator_roles}` | ✅ Fixed — payload now sends all required `EvalRequest` fields; response checks `data.get("allowed")`. |
 
 ---
 
@@ -327,7 +329,7 @@ spec:
 
 | Priority | Items | Key Risk |
 |----------|-------|----------|
-| **P0 — Blocking** | Patch 5.1, 5.2 (crash bugs), Patch 5.3 (compositor policy broken) | bundlectl, wallctl, compositor all non-functional |
+| **P0 — Blocking** | ~~Patch 5.1, 5.2 (crash bugs), Patch 5.3 (compositor policy broken)~~ | ✅ **All resolved** — bundlectl, wallctl, compositor all functional |
 | **P1 — High** | PR 2 (default-deny + PDB), PR 4 (Vault chart), PR 5 (gateway WebRTC) | Security model incomplete; no SFU ingest path for HDMI |
 | **P2 — Medium** | PR 3 (StatefulSet+GPU), PR 6 (VDI WebRTC), PR 8 (tag enrichment) | HA and media paths incomplete |
 | **P3 — Low** | PR 7 (UI + audit export), sizing docs | Functional completeness |

@@ -304,21 +304,31 @@ data path:
    corresponding database record in mgmt-api, Janus room, compositor pipeline,
    or gateway ingest. Each requires an explicit API call.
 
-3. **Compositor policy payload**: the compositor calls the policy service but
-   the request payload does not fully match the policy service's expected
-   schema. This causes compositor inputs to default-deny.
+3. **~~Compositor policy payload~~** *(resolved)*: the compositor now sends a
+   well-formed `EvalRequest` to the policy service with `wall_id`,
+   `source_id`, `operator_id`, `operator_roles`, and `operator_tags`. The
+   response is checked via `data.get("allowed")`.
 
 ---
 
 ## 4. Known Gaps and Remaining Work
 
-### 4.1 Priority 0 — Blocking Bugs
+### 4.1 Priority 0 — Blocking Bugs (all resolved)
 
-| Issue | Location | Impact |
+The following three bugs were identified during the Phase 2 compliance review
+and have since been fixed in the codebase. They are listed here for
+traceability.
+
+| Issue | Location | Status |
 |-------|----------|--------|
-| Missing `import re` | `tools/bundlectl/bundlectl.py` | Crash on key loading — bundlectl unusable |
-| Missing `import shutil` | `agents/wallctl/vw_wallctl.py` | Crash when displaying safe-slate image |
-| Compositor policy payload mismatch | `services/compositor/app/policy.py` | All compositor inputs default-denied |
+| Missing `import re` | `tools/bundlectl/bundlectl.py` | ✅ Fixed — `re`, `shutil`, `subprocess` all imported (lines 11–13) |
+| Missing `import shutil` | `agents/wallctl/vw_wallctl.py` | ✅ Fixed — `shutil` imported (line 9) |
+| Compositor policy payload mismatch | `services/compositor/app/policy.py` | ✅ Fixed — payload matches `EvalRequest` schema; checks `data.get("allowed")` |
+
+Verification: `bundlectl` export/verify/diff roundtrip passes (3 Ed25519
+tests + 3 HMAC-fallback tests). `wallctl` safe-slate path resolves
+`shutil.which("fbi")` without error. Compositor policy sends `wall_id`,
+`source_id`, `operator_id`, `operator_roles`, `operator_tags` as required.
 
 ### 4.2 Priority 1 — Architecture Gaps
 
@@ -438,7 +448,8 @@ define the entire deployment, and offline updates maintain the fleet.
 
 ### Near Term (next sprint)
 
-1. Fix P0 blocking bugs (bundlectl imports, wallctl shutil, compositor policy)
+1. ~~Fix P0 blocking bugs (bundlectl imports, wallctl shutil, compositor
+   policy)~~ — **Done**
 2. Implement gateway WebRTC republish pipeline (SRT→Janus via webrtcbin)
 3. Add config reconciliation loop in mgmt-api (vw-config → DB seed)
 4. Add audit signed export endpoint
