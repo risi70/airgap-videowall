@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import hmac
@@ -31,6 +32,7 @@ from .models import (
     WallIn,
     WhoAmI,
 )
+from .reconcile import reconcile_loop, reconcile_once
 
 app = FastAPI(title="vw-mgmt-api", version="0.1.0")
 
@@ -140,6 +142,7 @@ def require_role(*required: str) -> Callable[[dict[str, Any]], dict[str, Any]]:
 @app.on_event("startup")
 async def _startup() -> None:
     await init_schema()
+    asyncio.create_task(reconcile_loop())
 
 
 @app.on_event("shutdown")
@@ -657,3 +660,12 @@ async def gateway_probe(payload: dict[str, Any], _: dict[str, Any] = Depends(req
     if r.status_code != 200:
         raise HTTPException(status_code=502, detail="gateway_probe_error")
     return r.json()
+
+
+# ---- Config reconciliation ----
+
+@app.post("/api/v1/config/reconcile")
+async def config_reconcile(_: dict[str, Any] = Depends(require_role("admin"))) -> dict[str, Any]:
+    """Manually trigger config reconciliation from vw-config into DB."""
+    result = await reconcile_once()
+    return {"reconciled": True, **result}

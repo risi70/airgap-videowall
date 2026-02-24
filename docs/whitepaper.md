@@ -295,14 +295,16 @@ The following paths are fully implemented with tests:
 These components are individually implemented but not yet wired together in the
 data path:
 
-1. **SFU room auto-creation**: vw-config computes `sfu_rooms_needed` but
-   mgmt-api does not yet reconcile Janus rooms from this metric. Rooms must be
-   created manually or via API calls.
+1. **~~SFU room auto-creation~~** *(partially resolved)*: vw-config computes
+   `sfu_rooms_needed` and the new reconciliation loop seeds wall definitions
+   into the mgmt-api database.  Automatic Janus room creation from these
+   records is a remaining integration step.
 
-2. **Config-driven reconciliation**: adding a wall in the YAML makes it
-   visible via vw-config API, but does not automatically create the
-   corresponding database record in mgmt-api, Janus room, compositor pipeline,
-   or gateway ingest. Each requires an explicit API call.
+2. **~~Config-driven reconciliation~~** *(resolved)*: adding a wall or source
+   in the YAML config now automatically creates or updates the corresponding
+   database record in mgmt-api via the reconciliation loop. Compositor
+   pipeline and gateway ingest creation from reconciled records are remaining
+   integration steps.
 
 3. **~~Compositor policy payload~~** *(resolved)*: the compositor now sends a
    well-formed `EvalRequest` to the policy service with `wall_id`,
@@ -341,10 +343,13 @@ WebRTC publish pipeline or a Janus Streaming Plugin SRT ingest path is needed.
 ends with a placeholder `fakesink`. Actual webrtcbin pipeline with Janus
 signaling is not implemented.
 
-**Config reconciliation loop:** When a wall or source is added to the YAML
-config, downstream services should automatically reconcile. This requires
-mgmt-api to poll vw-config on startup and on hash changes, seeding or updating
-its database accordingly.
+**~~Config reconciliation loop~~** *(resolved)*: mgmt-api now includes a
+reconciliation module (`app/reconcile.py`) that polls `vw-config` for hash
+changes and upserts walls and sources into the PostgreSQL database.
+Config-managed rows are tagged with `config:<id>` markers to distinguish
+them from manually-created records. The reconciler runs on startup and every
+30 seconds (configurable via `VW_RECONCILE_INTERVAL_S`). A manual trigger is
+available at `POST /api/v1/config/reconcile`. All changes emit audit events.
 
 **Audit signed export:** The audit service has a query endpoint but no signed
 JSONL export endpoint. The mgmt-api similarly lacks an export proxy.
@@ -451,7 +456,7 @@ define the entire deployment, and offline updates maintain the fleet.
 1. ~~Fix P0 blocking bugs (bundlectl imports, wallctl shutil, compositor
    policy)~~ — **Done**
 2. Implement gateway WebRTC republish pipeline (SRT→Janus via webrtcbin)
-3. Add config reconciliation loop in mgmt-api (vw-config → DB seed)
+3. ~~Add config reconciliation loop in mgmt-api (vw-config → DB seed)~~ — **Done**
 4. Add audit signed export endpoint
 
 ### Medium Term (next quarter)

@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     policy_url: str = "http://vw-policy:8001"
     health_url: str = "http://vw-health:8003"
     audit_url: str = "http://vw-audit:8002"
+    config_url: str = Field(default="http://vw-config:8006", description="vw-config base URL for reconciliation")
 
     # Stream token minting (HS256)
     stream_token_secret: str = Field(default="change-me")
