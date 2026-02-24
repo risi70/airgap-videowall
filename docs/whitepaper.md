@@ -373,9 +373,11 @@ to the audit chain.
 
 ### 4.4 Priority 3 — Functional Completeness
 
-**UI enhancements:** The web UI provides basic CRUD for walls, sources, and
-layouts, but lacks drag-and-drop layout editing, gateway probe integration,
-audit chain verification button, and bundle import/diff UI.
+**UI enhancements:** The web UI has most features implemented: source probe
+button, audit chain verify and export buttons, and full bundle management
+(export, import with ring selection, and client-side diff). The remaining gap
+is a visual drag-and-drop layout editor — layouts are currently created via
+a JSON textarea for `grid_config`.
 
 **Sizing documentation:** The sizing guide has placeholder numbers. It should
 reflect measured values for the W=4, N=64 reference deployment.
