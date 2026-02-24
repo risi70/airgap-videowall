@@ -373,11 +373,13 @@ to the audit chain.
 
 ### 4.4 Priority 3 — Functional Completeness
 
-**UI enhancements:** The web UI has most features implemented: source probe
-button, audit chain verify and export buttons, and full bundle management
-(export, import with ring selection, and client-side diff). The remaining gap
-is a visual drag-and-drop layout editor — layouts are currently created via
-a JSON textarea for `grid_config`.
+**~~UI enhancements~~** *(resolved)*: The web UI now has all planned features:
+source probe button, audit chain verify and export buttons, bundle management
+(export, import with ring selection, client-side diff), and a visual
+drag-and-drop layout editor with source chips, policy pre-checks, grid
+dimension controls, Visual ↔ JSON toggle, click-to-load from the layouts
+table, and a Clear Grid button. The JSON textarea remains available as a
+power-user fallback.
 
 **Sizing documentation:** The sizing guide has placeholder numbers. It should
 reflect measured values for the W=4, N=64 reference deployment.

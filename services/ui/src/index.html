@@ -23,6 +23,30 @@
     .warn { border-color:#ed6c02; color:#ed6c02; }
     .bad { border-color:#d32f2f; color:#d32f2f; }
     .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 12px; }
+    /* Layout grid editor */
+    .layout-grid { display:inline-grid; gap:4px; margin-top:8px; }
+    .layout-cell {
+      width:90px; height:60px; border:2px dashed #ccc; border-radius:6px;
+      display:flex; align-items:center; justify-content:center;
+      font-size:11px; text-align:center; cursor:default; transition: all 0.15s;
+      position:relative; overflow:hidden; background:#fafafa;
+    }
+    .layout-cell.drag-over { border-color:#0366d6; background:#e8f0fe; }
+    .layout-cell.assigned { border-style:solid; border-color:#2e7d32; background:#e8f5e9; cursor:pointer; }
+    .layout-cell.denied { border-style:solid; border-color:#d32f2f; background:#ffebee; }
+    .layout-cell .cell-label { font-size:9px; color:#888; position:absolute; top:2px; left:4px; }
+    .layout-cell .cell-src { font-size:11px; font-weight:600; color:#1a1a1a; }
+    .layout-cell .cell-remove { position:absolute; top:1px; right:3px; cursor:pointer; font-size:12px; color:#999; }
+    .layout-cell .cell-remove:hover { color:#d32f2f; }
+    .source-chip {
+      display:inline-block; padding:4px 10px; margin:3px; border-radius:6px;
+      border:1px solid #0366d6; background:#f0f6ff; color:#0366d6;
+      font-size:12px; cursor:grab; user-select:none;
+    }
+    .source-chip:active { cursor:grabbing; }
+    .view-toggle { display:inline-flex; border:1px solid #ccc; border-radius:6px; overflow:hidden; margin-bottom:8px; }
+    .view-toggle button { border:none; padding:5px 12px; cursor:pointer; background:#fff; font-size:12px; }
+    .view-toggle button.active { background:#0366d6; color:#fff; }
   </style>
 </head>
 <body>
@@ -324,8 +348,128 @@ async function sourcesPage(){
 async function layoutsPage(){
   const app = document.getElementById('app');
   app.innerHTML = '';
-  const [walls, layouts] = await Promise.all([api('/walls'), api('/layouts')]);
+  const [walls, sources, layouts] = await Promise.all([api('/walls'), api('/sources'), api('/layouts')]);
 
+  // ── State ────────────────────────────────────────────────────────────
+  let gridRows = 2, gridCols = 2;
+  const tileAssignments = {};  // "row-col" → {source_id, source_name}
+  const tileDenied = {};       // "row-col" → true if policy denied
+  let viewMode = 'visual';     // 'visual' | 'json'
+
+  // ── Grid config ↔ JSON sync ──────────────────────────────────────────
+  function stateToGridConfig(){
+    const tiles = [];
+    for (const [key, val] of Object.entries(tileAssignments)){
+      const [r,c] = key.split('-').map(Number);
+      tiles.push({tile_id:`tile-${r}-${c}`, row:r, col:c, source_id:val.source_id, source_name:val.source_name});
+    }
+    return {rows: gridRows, cols: gridCols, tiles};
+  }
+
+  function loadFromGridConfig(gc){
+    gridRows = gc.rows || 2;
+    gridCols = gc.cols || 2;
+    Object.keys(tileAssignments).forEach(k => delete tileAssignments[k]);
+    Object.keys(tileDenied).forEach(k => delete tileDenied[k]);
+    for (const t of (gc.tiles || [])){
+      if (t.source_id !== undefined && t.source_id !== null){
+        const r = t.row ?? 0, c = t.col ?? 0;
+        tileAssignments[`${r}-${c}`] = {source_id: t.source_id, source_name: t.source_name || `src-${t.source_id}`};
+      }
+    }
+  }
+
+  function syncJsonFromGrid(){
+    const ta = document.getElementById('ly_grid');
+    if (ta) ta.value = JSON.stringify(stateToGridConfig(), null, 2);
+  }
+
+  function syncGridFromJson(){
+    const ta = document.getElementById('ly_grid');
+    if (!ta) return;
+    try { const gc = JSON.parse(ta.value); loadFromGridConfig(gc); renderGrid(); } catch(e){}
+  }
+
+  // ── Policy pre-check ─────────────────────────────────────────────────
+  async function checkPolicy(wallId, sourceId, cellKey){
+    try {
+      const res = await api('/policy/evaluate', {method:'POST', body: JSON.stringify({
+        wall_id: parseInt(wallId,10), source_id: parseInt(sourceId,10)
+      })});
+      if (!res.allowed){ tileDenied[cellKey] = true; renderGrid(); }
+    } catch(e){ /* policy unreachable — allow optimistically */ }
+  }
+
+  // ── Render visual grid ───────────────────────────────────────────────
+  function renderGrid(){
+    const container = document.getElementById('layout-grid-container');
+    if (!container) return;
+    container.innerHTML = '';
+    const grid = document.createElement('div');
+    grid.className = 'layout-grid';
+    grid.style.gridTemplateColumns = `repeat(${gridCols}, 90px)`;
+    for (let r = 0; r < gridRows; r++){
+      for (let c = 0; c < gridCols; c++){
+        const key = `${r}-${c}`;
+        const cell = document.createElement('div');
+        const assigned = tileAssignments[key];
+        const denied = tileDenied[key];
+        cell.className = 'layout-cell' + (assigned ? ' assigned' : '') + (denied ? ' denied' : '');
+        const label = document.createElement('span');
+        label.className = 'cell-label';
+        label.textContent = `${r},${c}`;
+        cell.appendChild(label);
+        if (assigned){
+          const src = document.createElement('span');
+          src.className = 'cell-src';
+          src.textContent = assigned.source_name;
+          cell.appendChild(src);
+          const rm = document.createElement('span');
+          rm.className = 'cell-remove';
+          rm.textContent = '\u2715';
+          rm.onclick = (e) => { e.stopPropagation(); delete tileAssignments[key]; delete tileDenied[key]; renderGrid(); syncJsonFromGrid(); };
+          cell.appendChild(rm);
+        }
+        cell.ondragover = (e) => { e.preventDefault(); cell.classList.add('drag-over'); };
+        cell.ondragleave = () => { cell.classList.remove('drag-over'); };
+        cell.ondrop = (e) => {
+          e.preventDefault(); cell.classList.remove('drag-over');
+          const srcId = e.dataTransfer.getData('source_id');
+          const srcName = e.dataTransfer.getData('source_name');
+          if (srcId){
+            delete tileDenied[key];
+            tileAssignments[key] = {source_id: parseInt(srcId,10), source_name: srcName};
+            renderGrid(); syncJsonFromGrid();
+            const wallId = document.getElementById('ly_wall').value;
+            checkPolicy(wallId, srcId, key);
+          }
+        };
+        grid.appendChild(cell);
+      }
+    }
+    container.appendChild(grid);
+  }
+
+  function onDimsChange(){
+    gridRows = Math.max(1, parseInt(document.getElementById('grid_rows').value,10) || 1);
+    gridCols = Math.max(1, parseInt(document.getElementById('grid_cols').value,10) || 1);
+    for (const key of Object.keys(tileAssignments)){
+      const [r,c] = key.split('-').map(Number);
+      if (r >= gridRows || c >= gridCols){ delete tileAssignments[key]; delete tileDenied[key]; }
+    }
+    renderGrid(); syncJsonFromGrid();
+  }
+
+  function setView(mode){
+    viewMode = mode;
+    document.getElementById('visual-editor').style.display = mode === 'visual' ? 'block' : 'none';
+    document.getElementById('json-editor').style.display = mode === 'json' ? 'block' : 'none';
+    document.querySelectorAll('.view-toggle button').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+    if (mode === 'visual') syncGridFromJson();
+    if (mode === 'json') syncJsonFromGrid();
+  }
+
+  // ── Build form ───────────────────────────────────────────────────────
   const form = h('div',{class:'card'}, h('h3',{},'Create / Update Layout'),
     h('div',{class:'row'},
       h('div',{}, h('label',{},'Layout ID (blank=create)'), h('input',{id:'ly_id', class:'mono'})),
@@ -334,14 +478,46 @@ async function layoutsPage(){
       )),
     ),
     h('div',{}, h('label',{},'Name'), h('input',{id:'ly_name'})),
-    h('div',{}, h('label',{},'Preset name'), h('input',{id:'ly_preset', placeholder:'default'})),
-    h('div',{}, h('label',{},'Active'), h('select',{id:'ly_active'}, h('option',{value:'false'},'false'), h('option',{value:'true'},'true'))),
-    h('div',{}, h('label',{},'Grid config (JSON)'), h('textarea',{id:'ly_grid', rows:'8', class:'mono'}, JSON.stringify({rows:2, cols:2, tiles:[]}, null, 2))),
+    h('div',{class:'row'},
+      h('div',{}, h('label',{},'Preset name'), h('input',{id:'ly_preset', placeholder:'default'})),
+      h('div',{}, h('label',{},'Active'), h('select',{id:'ly_active'}, h('option',{value:'false'},'false'), h('option',{value:'true'},'true'))),
+    ),
+    h('div',{style:'margin-top:10px;'},
+      h('div',{class:'view-toggle'},
+        h('button',{class:'active', 'data-mode':'visual', onclick:()=>setView('visual')}, '\u229e Visual'),
+        h('button',{'data-mode':'json', onclick:()=>setView('json')}, '{ } JSON'),
+      ),
+    ),
+    h('div',{id:'visual-editor'},
+      h('div',{style:'display:flex;gap:12px;align-items:flex-start;'},
+        h('div',{},
+          h('div',{style:'display:flex;gap:8px;align-items:center;margin-bottom:6px;'},
+            h('label',{style:'font-size:12px;'},'Rows:'),
+            h('input',{id:'grid_rows', type:'number', value:'2', min:'1', max:'20', style:'width:50px;', oninput:onDimsChange}),
+            h('label',{style:'font-size:12px;margin-left:6px;'},'Cols:'),
+            h('input',{id:'grid_cols', type:'number', value:'2', min:'1', max:'20', style:'width:50px;', oninput:onDimsChange}),
+          ),
+          h('div',{id:'layout-grid-container'}),
+        ),
+        h('div',{style:'min-width:160px;'},
+          h('div',{style:'font-size:12px;font-weight:600;margin-bottom:6px;color:#555;'},'Drag sources onto grid:'),
+          ...sources.map(s => {
+            const chip = h('div',{class:'source-chip', draggable:'true'}, `${s.id}: ${s.name}`);
+            chip.ondragstart = (e) => { e.dataTransfer.setData('source_id', String(s.id)); e.dataTransfer.setData('source_name', s.name); e.dataTransfer.effectAllowed = 'copy'; };
+            return chip;
+          })
+        ),
+      ),
+    ),
+    h('div',{id:'json-editor', style:'display:none;'},
+      h('textarea',{id:'ly_grid', rows:'10', class:'mono', oninput:syncGridFromJson}, JSON.stringify({rows:2, cols:2, tiles:[]}, null, 2)),
+    ),
     h('div',{style:'margin-top:10px;display:flex;gap:8px;'},
       h('button',{onclick: async ()=>{
         const id = document.getElementById('ly_id').value.trim();
         let grid;
-        try { grid = JSON.parse(document.getElementById('ly_grid').value); } catch(e){ return alert('invalid JSON'); }
+        if (viewMode === 'visual'){ grid = stateToGridConfig(); }
+        else { try { grid = JSON.parse(document.getElementById('ly_grid').value); } catch(e){ return alert('invalid JSON'); } }
         const payload = {
           wall_id: parseInt(document.getElementById('ly_wall').value,10),
           name: document.getElementById('ly_name').value.trim(),
@@ -351,50 +527,62 @@ async function layoutsPage(){
         };
         if (!payload.name) return alert('name required');
         try{
-          if (id){
-            await api('/layouts/'+id, {method:'PUT', body: JSON.stringify(payload)});
-          }else{
-            await api('/layouts', {method:'POST', body: JSON.stringify(payload)});
-          }
+          if (id){ await api('/layouts/'+id, {method:'PUT', body: JSON.stringify(payload)}); }
+          else { await api('/layouts', {method:'POST', body: JSON.stringify(payload)}); }
           setActiveRoute('layouts');
         }catch(e){ alert(e.message); }
       }}, 'Save'),
       h('button',{onclick: async ()=>{
         const id = document.getElementById('ly_id').value.trim();
         if (!id) return alert('set layout ID');
-        try{
-          await api('/layouts/'+id+'/activate', {method:'PUT'});
-          setActiveRoute('layouts');
-        }catch(e){ alert(e.message); }
+        try{ await api('/layouts/'+id+'/activate', {method:'PUT'}); setActiveRoute('layouts'); }catch(e){ alert(e.message); }
       }}, 'Activate'),
       h('button',{onclick: async ()=>{
         const id = document.getElementById('ly_id').value.trim();
         if (!id) return alert('set ID');
         if (!confirm('Delete layout '+id+'?')) return;
-        try{
-          await api('/layouts/'+id, {method:'DELETE'});
-          setActiveRoute('layouts');
-        }catch(e){ alert(e.message); }
-      }}, 'Delete')
+        try{ await api('/layouts/'+id, {method:'DELETE'}); setActiveRoute('layouts'); }catch(e){ alert(e.message); }
+      }}, 'Delete'),
+      h('button',{onclick: ()=>{
+        Object.keys(tileAssignments).forEach(k => delete tileAssignments[k]);
+        Object.keys(tileDenied).forEach(k => delete tileDenied[k]);
+        renderGrid(); syncJsonFromGrid();
+      }}, 'Clear Grid')
     )
   );
 
+  // ── Layouts table (click to load into editor) ────────────────────────
   const tbl = h('table',{},
     h('thead',{}, h('tr',{}, h('th',{},'ID'), h('th',{},'Wall'), h('th',{},'Name'), h('th',{},'Ver'), h('th',{},'Active'), h('th',{},'Preview'))),
     h('tbody',{}, ...layouts.map(l=>{
       const prev = miniGrid(l.grid_config || {});
-      return h('tr',{},
+      return h('tr',{style:'cursor:pointer;', onclick:()=>{
+        document.getElementById('ly_id').value = l.id;
+        document.getElementById('ly_name').value = l.name;
+        document.getElementById('ly_preset').value = l.preset_name || '';
+        document.getElementById('ly_active').value = l.is_active ? 'true' : 'false';
+        const wallSel = document.getElementById('ly_wall');
+        for (let i=0;i<wallSel.options.length;i++){ if (wallSel.options[i].value === String(l.wall_id)){ wallSel.selectedIndex = i; break; } }
+        const gc = l.grid_config || {rows:2, cols:2, tiles:[]};
+        loadFromGridConfig(gc);
+        document.getElementById('grid_rows').value = gridRows;
+        document.getElementById('grid_cols').value = gridCols;
+        document.getElementById('ly_grid').value = JSON.stringify(gc, null, 2);
+        renderGrid();
+      }},
         h('td',{class:'mono'}, String(l.id)),
         h('td',{}, String(l.wall_id)),
         h('td',{}, l.name),
         h('td',{}, String(l.version)),
-        h('td',{}, l.is_active ? 'true' : 'false'),
+        h('td',{}, l.is_active ? '\u2714' : ''),
         h('td',{}, prev)
       );
     }))
   );
 
-  app.appendChild(h('div',{class:'grid'}, form, h('div',{class:'card'}, h('h3',{},'Layouts'), tbl)));
+  app.appendChild(h('div',{class:'grid'}, form, h('div',{class:'card'}, h('h3',{},'Layouts'), h('div',{style:'font-size:12px;color:#666;margin-bottom:6px;'},'Click a row to load into editor'), tbl)));
+  renderGrid();
+  syncJsonFromGrid();
 }
 
 async function policyPage(){
